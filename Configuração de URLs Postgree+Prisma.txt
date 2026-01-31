@@ -1,0 +1,76 @@
+DATABASE_URL=postgresql://postgres:tuwkEv-wikduf-7capgo@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1
+
+
+DATABASE_URL=postgresql://postgres.tdfehnxwoooryeqqwzsl:tuwkEv-wikduf-7capgo@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1
+
+
+tdfehnxwoooryeqqwzsl
+
+tdfehnxwoooryeqqwzsl
+
+
+DATABASE_URL=
+
+postgresql://postgres.
+
+tdfehnxwoooryeqqwzsl:
+
+SUA_SENHA
+
+@aws-0-sa-east-1.pooler.supabase.com:6543
+
+/postgres?pgbouncer=true
+
+
+
+tuwkEv-wikduf-7capgo
+
+DATABASE_URL=postgresql://postgres.tdfehnxwoooryeqqwzsl:tuwkEv-wikduf-7capgo@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+
+
+
+dantas@MacBook-Air-de-Rafael whatsapp-hub % node -e "require('dotenv').config(); console.log(process.env.DATABASE_URL)"
+postgresql://postgres.tdfehnxwoooryeqqwzsl:*********@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+dantas@MacBook-Air-de-Rafael whatsapp-hub % 
+
+
+
+
+
+DATABASE_URL=postgresql://postgres:tuwkEv-wikduf-7capgo@db.tdfehnxwoooryeqqwzsl.supabase.co:5432/postgres
+
+
+
+
+dantas@MacBook-Air-de-Rafael whatsapp-hub % nano .env                                                                  
+dantas@MacBook-Air-de-Rafael whatsapp-hub % 
+dantas@MacBook-Air-de-Rafael whatsapp-hub % nano .env.local
+dantas@MacBook-Air-de-Rafael whatsapp-hub % 
+dantas@MacBook-Air-de-Rafael whatsapp-hub % node -e "require('dotenv').config(); console.log(process.env.DATABASE_URL)"
+postgresql://postgres:**************@db.tdfehnxwoooryeqqwzsl.supabase.co:5432/postgres
+dantas@MacBook-Air-de-Rafael whatsapp-hub % 
+
+
+
+------
+Tentativa Claude
+
+DATABASE_URL=postgresql://postgres:tuwkEv-wikduf-7capgo@db.tdfehnxwoooryeqqwzsl.supabase.co:5432/postgres
+
+
+DATABASE_URL="postgresql://postgres.tdfehnxwoooryeqqwzsl:tuwkEv-wikduf-7capgo@aws-1-sa-east-1.pooler.supabase.com:5432/postgres"
+
+
+
+
+node -e "
+const { Client } = require('pg');
+const client = new Client({
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:tuwkEv-wikduf-7capgo@db.tdfehnxwoooryeqqwzsl.supabase.co:5432/postgres'
+});
+client.connect()
+  .then(() => { console.log('✅ Conexão OK'); client.end(); })
+  .catch(err => console.error('❌ Erro:', err.message));
+"
+
+
