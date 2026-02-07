@@ -8,12 +8,13 @@ import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode';
 import { PrismaClient } from '@prisma/client';
 import pino from 'pino';
+import { handleIncomingMessage } from './messageHandler';
 
 const prisma = new PrismaClient();
 
 // Armazena conexões ativas por userId
 const activeConnections = new Map<string, WASocket>();
-const pendingConnections = new Set<string>(); // Previne múltiplas tentativas
+const pendingConnections = new Set<string>();
 
 interface QRResponse {
   qrCode: string;
@@ -23,7 +24,6 @@ interface QRResponse {
 
 export async function connectWhatsApp(userId: string): Promise<QRResponse> {
   try {
-    // Se já está conectado, retornar status
     if (activeConnections.has(userId)) {
       return {
         qrCode: '',
@@ -32,7 +32,6 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
       };
     }
 
-    // Se já está tentando conectar, aguardar
     if (pendingConnections.has(userId)) {
       return {
         qrCode: '',
@@ -44,12 +43,10 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
     pendingConnections.add(userId);
     console.log(`📱 Iniciando conexão WhatsApp para usuário: ${userId}`);
 
-    // Buscar sessão existente no banco
     const existingSession = await prisma.whatsAppSession.findFirst({
       where: { userId }
     });
 
-    // Usar auth state do banco (se existir)
     const authFolder = `./auth_sessions/${userId}`;
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
 
@@ -61,22 +58,26 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
 
     let qrCodeData: string | null = null;
 
-    // Listener de conexão
+    // ========== NOVO: LISTENER DE MENSAGENS ==========
+    sock.ev.on('messages.upsert', async ({ messages }) => {
+      for (const message of messages) {
+        await handleIncomingMessage(message);
+      }
+    });
+    // =================================================
+
     sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
       const { connection, lastDisconnect, qr } = update;
 
-      // Gerar QR Code
       if (qr) {
         console.log('🔲 QR Code gerado');
         qrCodeData = await qrcode.toDataURL(qr);
       }
 
-      // Conexão estabelecida
       if (connection === 'open') {
         console.log('✅ WhatsApp conectado!');
         pendingConnections.delete(userId);
         
-        // Salvar/atualizar sessão no banco
         await prisma.whatsAppSession.upsert({
           where: { id: existingSession?.id || 'new' },
           create: {
@@ -94,7 +95,6 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
         activeConnections.set(userId, sock);
       }
 
-      // Desconexão
       if (connection === 'close') {
         pendingConnections.delete(userId);
         activeConnections.delete(userId);
@@ -103,15 +103,13 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
         console.log('❌ Conexão fechada. Reconectar?', shouldReconnect);
 
         if (shouldReconnect) {
-          setTimeout(() => connectWhatsApp(userId), 5000); // Aguardar 5s antes de reconectar
+          setTimeout(() => connectWhatsApp(userId), 5000);
         }
       }
     });
 
-    // Listener de atualização de credenciais
     sock.ev.on('creds.update', saveCreds);
 
-    // Aguardar QR Code ser gerado (timeout 30s)
     await new Promise((resolve) => {
       const interval = setInterval(() => {
         if (qrCodeData || sock.user) {
