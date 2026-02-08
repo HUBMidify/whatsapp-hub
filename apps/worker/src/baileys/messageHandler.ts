@@ -1,5 +1,5 @@
 import { WAMessage, WASocket } from '@whiskeysockets/baileys';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -15,7 +15,6 @@ export async function handleIncomingMessage(message: WAMessage, sock?: WASocket)
 
     const rawJid = message.key.remoteJid || '';
     
-    // Extrair telefone limpo (remover @s.whatsapp.net e @lid)
     const phone = rawJid
       .replace('@s.whatsapp.net', '')
       .replace('@lid', '');
@@ -32,24 +31,18 @@ export async function handleIncomingMessage(message: WAMessage, sock?: WASocket)
 
     console.log(`📩 Mensagem de ${phone}: ${messageText.substring(0, 50)}...`);
 
-    // Tentar buscar nome do contato via WhatsApp
     let contactName: string | null = null;
     
     if (sock) {
       try {
-        const contact = await sock.onWhatsApp(rawJid);
-        if (contact && contact[0]) {
-          // Buscar informações completas do contato
-          const contactInfo = message.pushName || null;
-          contactName = contactInfo;
-          console.log(`👤 Nome do contato: ${contactName || 'Não disponível'}`);
-        }
+        const contactInfo = message.pushName || null;
+        contactName = contactInfo;
+        console.log(`👤 Nome do contato: ${contactName || 'Não disponível'}`);
       } catch (error) {
         console.log('⚠️  Não foi possível buscar nome do contato');
       }
     }
 
-    // Buscar ou criar Lead
     let lead = await prisma.lead.findUnique({
       where: { phone }
     });
@@ -65,8 +58,7 @@ export async function handleIncomingMessage(message: WAMessage, sock?: WASocket)
       });
       console.log(`✅ Lead criado: ${phone}${contactName ? ` (${contactName})` : ''}`);
     } else {
-      // Atualizar nome se veio vazio antes
-      const updateData: any = { lastSeenAt: new Date() };
+      const updateData: Prisma.LeadUpdateInput = { lastSeenAt: new Date() };
       if (!lead.name && contactName) {
         updateData.name = contactName;
       }
@@ -77,7 +69,6 @@ export async function handleIncomingMessage(message: WAMessage, sock?: WASocket)
       });
     }
 
-    // Criar Conversation
     const conversation = await prisma.conversation.create({
       data: {
         leadId: lead.id,

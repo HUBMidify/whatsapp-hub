@@ -1,6 +1,6 @@
 import makeWASocket, { 
   DisconnectReason, 
-  useMultiFileAuthState,
+  useMultiFileAuthState as multiFileAuthState,
   WASocket,
   ConnectionState
 } from '@whiskeysockets/baileys';
@@ -47,7 +47,7 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
     });
 
     const authFolder = `./auth_sessions/${userId}`;
-    const { state, saveCreds } = await useMultiFileAuthState(authFolder);
+    const { state, saveCreds } = await multiFileAuthState(authFolder);
 
     const sock = makeWASocket({
       auth: state,
@@ -57,7 +57,6 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
 
     let qrCodeData: string | null = null;
 
-    // Listener de mensagens (passando sock para buscar nome)
     sock.ev.on('messages.upsert', async ({ messages }) => {
       for (const message of messages) {
         await handleIncomingMessage(message, sock);
