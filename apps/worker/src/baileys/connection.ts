@@ -12,7 +12,6 @@ import { handleIncomingMessage } from './messageHandler';
 
 const prisma = new PrismaClient();
 
-// Armazena conexões ativas por userId
 const activeConnections = new Map<string, WASocket>();
 const pendingConnections = new Set<string>();
 
@@ -58,13 +57,12 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
 
     let qrCodeData: string | null = null;
 
-    // ========== NOVO: LISTENER DE MENSAGENS ==========
+    // Listener de mensagens (passando sock para buscar nome)
     sock.ev.on('messages.upsert', async ({ messages }) => {
       for (const message of messages) {
-        await handleIncomingMessage(message);
+        await handleIncomingMessage(message, sock);
       }
     });
-    // =================================================
 
     sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
       const { connection, lastDisconnect, qr } = update;

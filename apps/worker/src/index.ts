@@ -1,11 +1,13 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import { connectWhatsApp } from './baileys/connection';
+import { PrismaClient } from '@prisma/client';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const prisma = new PrismaClient();
 
 app.use(express.json());
 
@@ -41,8 +43,41 @@ app.get('/qrcode/:userId', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+// ========== NOVO: AUTO-CONECTAR AO INICIAR ==========
+async function autoConnectWhatsApp() {
+  try {
+    console.log('🔄 Buscando sessões ativas...');
+    
+    // Buscar todas as sessões conectadas no banco
+    const sessions = await prisma.whatsAppSession.findMany({
+      where: { status: 'CONNECTED' }
+    });
+
+    if (sessions.length === 0) {
+      console.log('⚠️  Nenhuma sessão ativa encontrada. Aguardando QR Code...');
+      return;
+    }
+
+    console.log(`✅ ${sessions.length} sessão(ões) encontrada(s). Reconectando...`);
+
+    // Reconectar cada sessão
+    for (const session of sessions) {
+      console.log(`🔌 Reconectando usuário: ${session.userId}`);
+      await connectWhatsApp(session.userId);
+    }
+  } catch (error) {
+    console.error('❌ Erro ao auto-conectar:', error);
+  }
+}
+// ==================================================
+
+app.listen(PORT, async () => {
   console.log(`🚀 Worker rodando na porta ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/health`);
   console.log(`📱 QR Code: http://localhost:${PORT}/qrcode/{userId}`);
+  
+  // Auto-conectar após 3 segundos (dar tempo do servidor subir)
+  setTimeout(() => {
+    autoConnectWhatsApp();
+  }, 3000);
 });
