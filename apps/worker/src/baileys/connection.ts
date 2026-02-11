@@ -66,6 +66,13 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
     sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
       const { connection, lastDisconnect, qr } = update;
 
+      console.log('🔄 Connection update:', {
+        connection,
+        hasDisconnect: !!lastDisconnect,
+        disconnectReason: (lastDisconnect?.error as Boom)?.output?.statusCode,
+        disconnectMessage: lastDisconnect?.error?.message
+      });
+
       if (qr) {
         console.log('🔲 QR Code gerado');
         qrCodeData = await qrcode.toDataURL(qr);
@@ -96,8 +103,14 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
         pendingConnections.delete(userId);
         activeConnections.delete(userId);
         
-        const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-        console.log('❌ Conexão fechada. Reconectar?', shouldReconnect);
+        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        
+        console.log('❌ Conexão fechada:', {
+          statusCode,
+          shouldReconnect,
+          errorMessage: lastDisconnect?.error?.message
+        });
 
         if (shouldReconnect) {
           setTimeout(() => connectWhatsApp(userId), 5000);

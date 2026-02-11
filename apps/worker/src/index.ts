@@ -11,7 +11,6 @@ const prisma = new PrismaClient();
 
 app.use(express.json());
 
-// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -20,7 +19,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Gerar QR Code para conectar WhatsApp
 app.get('/qrcode/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -43,24 +41,21 @@ app.get('/qrcode/:userId', async (req, res) => {
   }
 });
 
-// ========== NOVO: AUTO-CONECTAR AO INICIAR ==========
 async function autoConnectWhatsApp() {
   try {
     console.log('🔄 Buscando sessões ativas...');
     
-    // Buscar todas as sessões conectadas no banco
     const sessions = await prisma.whatsAppSession.findMany({
       where: { status: 'CONNECTED' }
     });
 
     if (sessions.length === 0) {
-      console.log('⚠️  Nenhuma sessão ativa encontrada. Aguardando QR Code...');
+      console.log('⚠️  Nenhuma sessão ativa encontrada. Use /qrcode para conectar.');
       return;
     }
 
     console.log(`✅ ${sessions.length} sessão(ões) encontrada(s). Reconectando...`);
 
-    // Reconectar cada sessão
     for (const session of sessions) {
       console.log(`🔌 Reconectando usuário: ${session.userId}`);
       await connectWhatsApp(session.userId);
@@ -69,14 +64,12 @@ async function autoConnectWhatsApp() {
     console.error('❌ Erro ao auto-conectar:', error);
   }
 }
-// ==================================================
 
 app.listen(PORT, async () => {
   console.log(`🚀 Worker rodando na porta ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/health`);
   console.log(`📱 QR Code: http://localhost:${PORT}/qrcode/{userId}`);
   
-  // Auto-conectar após 3 segundos (dar tempo do servidor subir)
   setTimeout(() => {
     autoConnectWhatsApp();
   }, 3000);
