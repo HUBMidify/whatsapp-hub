@@ -24,3 +24,6 @@ apps/*/dist/
 
 # Prisma
 apps/*/prisma/migrations/
+
+# WhatsApp worker sessions
+apps/worker/auth_sessions/

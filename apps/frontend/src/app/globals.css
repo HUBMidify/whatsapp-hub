@@ -1,2 +1,60 @@
-@import "tailwindcss/preflight";
+@tailwind base;
+@tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --primary: 0.5417 0.1790 288.0332;
+    --primary-foreground: 1 0 0;
+
+    --secondary: 0.9174 0.0435 292.6901;
+    --secondary-foreground: 0.4143 0.1039 288.1742;
+
+    --accent: 0.9221 0.0373 262.1410;
+    --accent-foreground: 0.3015 0.0572 282.4176;
+
+    --background: 0.9730 0.0133 286.1503;
+    --foreground: 0.3015 0.0572 282.4176;
+
+    --card: 1 0 0;
+    --card-foreground: 0.3015 0.0572 282.4176;
+
+    --muted: 0.9580 0.0133 286.1454;
+    --muted-foreground: 0.5426 0.0465 284.7435;
+
+    --border: 0.9115 0.0216 285.9625;
+    --input: 0.9115 0.0216 285.9625;
+    --ring: 0.5417 0.1790 288.0332;
+
+    --destructive: 0.6861 0.2061 14.9941;
+    --destructive-foreground: 1 0 0;
+
+    /* Sidebar */
+    --sidebar: 0.9580 0.0133 286.1454;
+    --sidebar-foreground: 0.3015 0.0572 282.4176;
+    --sidebar-border: 0.9115 0.0216 285.9625;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors font-medium;
+  }
+
+  .btn-secondary {
+    @apply bg-secondary text-secondary-foreground px-4 py-2 rounded-lg hover:bg-secondary/80 transition-colors font-medium;
+  }
+
+  .card {
+    @apply bg-card text-card-foreground rounded-xl shadow-sm border border-border p-6;
+  }
+
+  .input {
+    @apply w-full px-4 py-2 border border-input rounded-lg bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent;
+  }
+}

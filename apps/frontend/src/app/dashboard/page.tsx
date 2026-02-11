@@ -46,20 +46,27 @@ export default async function DashboardPage() {
   })
 
   return (
-    <div style={{ padding: 40 }}>
-      <div style={navStyles.container}>
-  <a href="/dashboard" style={navStyles.link}>
-    📋 Conversas
-  </a>
+     <div className="space-y-6">
+    {/* Header da página */}
+    <div className="flex justify-between items-center">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Conversas WhatsApp</h1>
+        <p className="text-sm text-gray-600 mt-1">
+          Visualize e filtre conversas por lead, origem e período.
+        </p>
+      </div>
 
-  <a href="/dashboard/whatsapp/connect" style={navStyles.link}>
-    🔗 Conectar WhatsApp
-  </a>
-</div>
-      <h1>Conversas WhatsApp</h1>
+      <a href="/dashboard/whatsapp/connect" className="btn-primary">
+        Conectar WhatsApp
+      </a>
+    </div>
 
+    {/* Card com tabela */}
+    <div className="card">
       <ConversationsTable rows={rows} />
     </div>
+  </div>
+    
   )
 }
 
@@ -73,26 +80,4 @@ function formatPhone(phone: string): string {
   const match = phone.match(/^55(\d{2})(\d{5})(\d{4})$/)
   if (!match) return phone
   return `+55 (${match[1]}) ${match[2]}-${match[3]}`
-}
-
-const styles = {
-  table: {
-    width: "100%",
-    borderCollapse: "collapse" as const,
-    marginTop: 20,
-  },
-}
-
-const navStyles = {
-  container: {
-    display: 'flex',
-    gap: 16,
-    marginBottom: 24,
-  },
-  link: {
-    textDecoration: 'none',
-    fontWeight: 'bold',
-    color: '#2563eb',
-    cursor: 'pointer',
-  },
 }
