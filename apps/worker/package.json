@@ -10,12 +10,12 @@
   "dependencies": {
     "@hapi/boom": "^10.0.1",
     "@prisma/client": "^5.22.0",
-    "prisma": "^5.22.0",
     "@types/qrcode": "^1.5.6",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "pino": "^10.3.0",
+    "prisma": "^5.22.0",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {

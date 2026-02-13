@@ -7,6 +7,7 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode';
 import { PrismaClient } from '@prisma/client';
+import { Prisma } from "@prisma/client"
 import pino from 'pino';
 import fs from 'fs/promises';
 import { handleIncomingMessage } from './messageHandler';
@@ -84,7 +85,7 @@ export async function disconnectWhatsApp(userId: string): Promise<{
   try {
     await prisma.whatsAppSession.updateMany({
       where: { userId },
-      data: { status: 'DISCONNECTED', credentials: null }
+      data: { status: 'DISCONNECTED', credentials: Prisma.JsonNull }
     });
   } catch (e) {
     console.warn('⚠️  Falha ao atualizar sessão no banco:', e);
