@@ -8,12 +8,90 @@ import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode';
 import { PrismaClient } from '@prisma/client';
 import pino from 'pino';
+import fs from 'fs/promises';
 import { handleIncomingMessage } from './messageHandler';
 
 const prisma = new PrismaClient();
 
 const activeConnections = new Map<string, WASocket>();
 const pendingConnections = new Set<string>();
+
+export function getWhatsAppConnectionStatus(userId: string): {
+  status: "connected" | "pending" | "disconnected";
+  connected: boolean;
+} {
+  if (activeConnections.has(userId)) {
+    return { status: "connected", connected: true };
+  }
+
+  if (pendingConnections.has(userId)) {
+    return { status: "pending", connected: false };
+  }
+
+  return { status: "disconnected", connected: false };
+}
+
+export async function disconnectWhatsApp(userId: string): Promise<{
+  success: boolean;
+  status: "disconnected";
+}> {
+  // Remove from pending (if any)
+  pendingConnections.delete(userId);
+
+  const sock = activeConnections.get(userId);
+
+  if (sock) {
+    try {
+      // Best-effort logout. Baileys typings vary by version.
+      type SocketWithOptionalLogout = WASocket & { logout?: () => Promise<void> };
+      const maybeLogoutSock = sock as SocketWithOptionalLogout;
+
+      if (typeof maybeLogoutSock.logout === "function") {
+        await maybeLogoutSock.logout();
+      }
+    } catch (e) {
+      console.warn(`⚠️  Falha ao fazer logout do WhatsApp (${userId}):`, e);
+    }
+
+    try {
+      // Baileys `end` expects an optional Error argument in some versions.
+      sock.end(undefined);
+    } catch (e) {
+      console.warn(`⚠️  Falha ao encerrar socket (${userId}):`, e);
+    }
+
+    try {
+      // `ws` is not always exposed in typings.
+      const sockWithWs = sock as WASocket & { ws?: { close?: () => void } };
+      if (typeof sockWithWs.ws?.close === "function") sockWithWs.ws.close();
+    } catch (e) {
+      console.warn(`⚠️  Falha ao fechar WS (${userId}):`, e);
+    }
+
+    activeConnections.delete(userId);
+  }
+
+  // Apaga credenciais para forçar novo QR no próximo connect
+  const authFolder = `./auth_sessions/${userId}`;
+  try {
+    await fs.rm(authFolder, { recursive: true, force: true });
+    console.log(`🧹 Credenciais removidas: ${authFolder}`);
+  } catch (e) {
+    console.warn(`⚠️  Falha ao remover credenciais (${authFolder}):`, e);
+  }
+
+  // Best-effort: marca sessão no banco como DISCONNECTED e limpa credenciais salvas
+  try {
+    await prisma.whatsAppSession.updateMany({
+      where: { userId },
+      data: { status: 'DISCONNECTED', credentials: null }
+    });
+  } catch (e) {
+    console.warn('⚠️  Falha ao atualizar sessão no banco:', e);
+  }
+
+  return { success: true, status: "disconnected" };
+}
 
 interface QRResponse {
   qrCode: string;

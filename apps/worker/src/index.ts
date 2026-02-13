@@ -1,6 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import { connectWhatsApp } from './baileys/connection';
+import { connectWhatsApp, getWhatsAppConnectionStatus, disconnectWhatsApp } from './baileys/connection';
 import { PrismaClient } from '@prisma/client';
 
 dotenv.config();
@@ -38,6 +38,51 @@ app.get('/qrcode/:userId', async (req, res) => {
       error: 'Erro ao gerar QR Code',
       message: error instanceof Error ? error.message : 'Erro desconhecido'
     });
+  }
+});
+
+app.get('/status/:userId', (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId é obrigatório' });
+    }
+
+    const status = getWhatsAppConnectionStatus(userId);
+
+    return res.json(status);
+  } catch (error) {
+    console.error('❌ Erro em GET /status/:userId:', error);
+    return res.status(500).json({ status: 'error', connected: false });
+  }
+});
+
+app.post('/disconnect/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId é obrigatório' });
+    }
+
+    // Derruba a conexão em memória
+    await disconnectWhatsApp(userId);
+
+    // Best-effort: atualiza status no banco (se existir registro)
+    try {
+      await prisma.whatsAppSession.updateMany({
+        where: { userId },
+        data: { status: 'DISCONNECTED' }
+      });
+    } catch (dbErr) {
+      console.warn('⚠️  Não foi possível atualizar status no banco:', dbErr);
+    }
+
+    return res.json({ success: true, status: 'disconnected' });
+  } catch (error) {
+    console.error('❌ Erro em POST /disconnect/:userId:', error);
+    return res.status(500).json({ success: false, error: 'Erro ao desconectar' });
   }
 });
 

@@ -34,6 +34,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [userEmail, setUserEmail] = useState<string>('')
 
+  const [waConnected, setWaConnected] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let alive = true
+
+    const check = async () => {
+      try {
+        const res = await fetch('/api/whatsapp/status', { cache: 'no-store' })
+        const data = await res.json().catch(() => ({}))
+        if (!alive) return
+        setWaConnected(!!data?.connected)
+      } catch {
+        if (!alive) return
+        setWaConnected(false)
+      }
+    }
+
+    check()
+    const interval = window.setInterval(check, 10000)
+
+    return () => {
+      alive = false
+      window.clearInterval(interval)
+    }
+  }, [])
+
   useEffect(() => {
     // NextAuth exposes the session at /api/auth/session
     fetch('/api/auth/session')
@@ -162,6 +188,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* Right actions */}
             <div className="flex items-center gap-2">
+              {/* WhatsApp status pill */}
+              {waConnected !== null && (
+                <div
+                  className={
+                    waConnected
+                      ? 'inline-flex items-center gap-2 rounded-full border border-green-300 bg-green-100 px-3 py-1 text-xs font-medium text-green-900 shadow-sm'
+                      : 'inline-flex items-center gap-2 rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-medium text-red-900 shadow-sm'
+                  }
+                  title={waConnected ? 'WhatsApp conectado' : 'WhatsApp desconectado'}
+                >
+                  <span
+                    className={
+                      waConnected
+                        ? 'h-2.5 w-2.5 rounded-full bg-lime-400 shadow-[0_0_0_3px_rgba(132,204,22,0.25)] animate-pulse'
+                        : 'h-2.5 w-2.5 rounded-full bg-red-600 shadow-[0_0_0_3px_rgba(239,68,68,0.25)]'
+                    }
+                    aria-hidden="true"
+                  />
+                  <span>{waConnected ? 'Conectado' : 'Desconectado'}</span>
+                </div>
+              )}
               {/* Notifications (placeholder) */}
               <button
                 type="button"
