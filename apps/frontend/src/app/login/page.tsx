@@ -35,7 +35,7 @@ export default function LoginPage() {
       <div className="card max-w-md w-full space-y-6">
         {/* Logo/Title */}
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900">WhatsApp Hub</h1>
+          <h1 className="text-3xl font-bold text-gray-800">WhatsApp Hub</h1>
           <p className="text-gray-600 mt-2">Rastreamento de Conversões</p>
         </div>
 
