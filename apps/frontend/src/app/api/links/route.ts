@@ -14,12 +14,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  const { searchParams } = new URL(req.url)
+  const archived = searchParams.get("archived") // "true" | null
+
+  const where =
+    archived === "true"
+      ? { userId, NOT: { archivedAt: null } }
+      : { userId, archivedAt: null } 
+
   const links = await prisma.trackingLink.findMany({
-    where: {
-      userId,
-      archivedAt: null,
-    },
-    orderBy: { createdAt: "desc" },
+      where,
+      orderBy: { createdAt: "desc" },
   })
 
   return NextResponse.json({ links })
