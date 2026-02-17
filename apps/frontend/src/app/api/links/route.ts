@@ -42,15 +42,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
 
-  const { name, slug, redirectUrl, preFilledMessage, utmSource, utmCampaign } =
-    body
+  const {
+    name,
+    slug,
+    redirectUrl,
+    whatsappNumber,
+    preFilledMessage,
+    utmSource,
+    utmCampaign,
+  } = body
 
-  if (!name || !slug || !redirectUrl) {
-    return NextResponse.json(
-      { error: "Campos obrigatórios: name, slug, redirectUrl" },
-      { status: 400 }
-    )
-  }
+  const hasRedirectUrl = typeof redirectUrl === "string" && redirectUrl.trim() !== ""
+const hasWhatsappNumber =
+  typeof whatsappNumber === "string" && whatsappNumber.trim() !== ""
+
+if (!name || !slug || (!hasRedirectUrl && !hasWhatsappNumber)) {
+  return NextResponse.json(
+    { error: "Campos obrigatórios: name, slug e (redirectUrl ou whatsappNumber)" },
+    { status: 400 }
+  )
+}
 
   const normalizedSlug = String(slug)
     .trim()
@@ -59,13 +70,19 @@ export async function POST(req: Request) {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
 
+  const normalizedWhatsappNumber =
+    typeof whatsappNumber === "string" && whatsappNumber.trim() !== ""
+      ? whatsappNumber.trim()
+      : null
+
   try {
     const link = await prisma.trackingLink.create({
       data: {
         userId,
         name,
         slug: normalizedSlug,
-        redirectUrl,
+        redirectUrl: hasRedirectUrl ? redirectUrl.trim() : "https://wa.me/",
+        whatsappNumber: normalizedWhatsappNumber,
         preFilledMessage: preFilledMessage ?? null,
         utmSource: utmSource ?? null,
         utmCampaign: utmCampaign ?? null,

@@ -54,6 +54,7 @@ model TrackingLink {
   name             String
   slug             String     @unique
   redirectUrl      String
+  whatsappNumber   String?
   preFilledMessage String?
   utmSource        String?
   utmCampaign      String?
