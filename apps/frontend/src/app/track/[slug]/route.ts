@@ -11,13 +11,6 @@ function getClientIp(request: Request) {
 
   return null
 }
-//Helper para montar o wa.me
-function buildWaMeUrlFromNumber(number: string, message: string) {
-  const cleanNumber = number.replace(/\D/g, "")
-  const clean = new URL(`https://wa.me/${cleanNumber}`)
-  if (message) clean.searchParams.set("text", message)
-  return clean.toString()
-}
 
 function buildWhatsAppRedirectUrl(baseRedirectUrl: string, message: string) {
   // IMPORTANT: never forward any existing query params (UTMs, fbclid, etc.) to WhatsApp.
@@ -67,13 +60,12 @@ export async function GET(
 
   // Referer existe, mas seu schema atual não tem campo "referrer"
   const _referrer = request.headers.get("referer") // capturado para futuro upgrade
+  void _referrer
 
   // 5) Calcular fbc (se fbclid existe)
   const fbc = fbclid ? `fb.1.${Date.now()}.${fbclid}` : null
 
   // 6) Salvar ClickLog no banco (não bloquear o redirect)
-  // OBS: "fire-and-forget" em serverless pode não ser 100% garantido,
-  // mas costuma funcionar bem. Se quiser 100% garantido, a gente dá await.
   void prisma.clickLog
     .create({
       data: {
@@ -94,18 +86,9 @@ export async function GET(
   // 7) Construir URL WhatsApp com mensagem
   const message = trackingLink.preFilledMessage?.trim() || "Olá!"
 
-  // Evita warning de variável não usada (campo para upgrade futuro)
-  void _referrer
-
   // 8) Redirecionar (302)
-  // Prioridade: se tiver whatsappNumber, montar wa.me a partir do número.
-  // Fallback: usar redirectUrl (modo compatibilidade).
-  let redirectTo: string
-  if (trackingLink.whatsappNumber && trackingLink.whatsappNumber.trim() !== "") {
-    redirectTo = buildWaMeUrlFromNumber(trackingLink.whatsappNumber, message)
-  } else {
-    redirectTo = buildWhatsAppRedirectUrl(trackingLink.redirectUrl, message)
-  }
+  // S5.T3: este endpoint registra o click e redireciona usando redirectUrl.
+  const redirectTo = buildWhatsAppRedirectUrl(trackingLink.redirectUrl, message)
 
   return Response.redirect(redirectTo, 302)
 }
