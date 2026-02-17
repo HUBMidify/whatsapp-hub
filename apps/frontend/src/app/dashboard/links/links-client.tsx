@@ -7,6 +7,7 @@ type TrackingLink = {
   name: string
   slug: string
   redirectUrl: string
+  whatsappNumber: string | null
   preFilledMessage: string | null
   utmSource: string | null
   utmCampaign: string | null
@@ -40,6 +41,7 @@ export default function LinksClient() {
   const [name, setName] = useState("")
   const [slug, setSlug] = useState("")
   const [redirectUrl, setRedirectUrl] = useState("")
+  const [whatsappNumber, setWhatsappNumber] = useState("")
   const [preFilledMessage, setPreFilledMessage] = useState("")
   const [utmSource, setUtmSource] = useState("")
   const [utmCampaign, setUtmCampaign] = useState("")
@@ -89,6 +91,7 @@ export default function LinksClient() {
           name,
           slug,
           redirectUrl,
+          whatsappNumber: whatsappNumber || null,
           preFilledMessage: preFilledMessage || null,
           utmSource: utmSource || null,
           utmCampaign: utmCampaign || null,
@@ -102,6 +105,7 @@ export default function LinksClient() {
       setOpen(false)
       setName("")
       setSlug("")
+      setWhatsappNumber("")
       setRedirectUrl("")
       setPreFilledMessage("")
       setUtmSource("")
@@ -275,6 +279,13 @@ export default function LinksClient() {
                 onChange={(e) => setSlug(e.target.value)}
               />
               <input
+                type="text"
+                placeholder="WhatsApp (ex: 5521999999999)"
+                value={whatsappNumber}
+                onChange={(e) => setWhatsappNumber(e.target.value)}
+                className="border rounded-md p-2 w-full"
+              />
+              <input
                 className="border rounded-md p-2"
                 placeholder="URL de destino (https://...)"
                 value={redirectUrl}
@@ -314,7 +325,7 @@ export default function LinksClient() {
               <button
                 className="px-3 py-2 rounded-md bg-black text-white disabled:opacity-50"
                 onClick={createLink}
-                disabled={loading || !name || !slug || !redirectUrl}
+                disabled={loading || !name || !slug || (!redirectUrl && !whatsappNumber)}
               >
                 Criar
               </button>
