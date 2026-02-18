@@ -24,16 +24,21 @@ function classifyChannel(click: ClickForChannel): ChannelKey {
 
   if (!source) return "untracked"
 
-  if (["facebook", "instagram", "meta"].some((s) => source.includes(s)))
+  if (["facebook", "instagram", "meta"].some((s) => source.includes(s))) {
     return "meta"
+  }
 
-  if (["google", "youtube"].some((s) => source.includes(s)))
+  if (["google", "youtube"].some((s) => source.includes(s))) {
     return "google"
+  }
 
-  if (["linkedin", "twitter", "tiktok", "pinterest"].some((s) =>
-    source.includes(s)
-  ))
+  if (
+    ["linkedin", "twitter", "tiktok", "pinterest"].some((s) =>
+      source.includes(s)
+    )
+  ) {
     return "social"
+  }
 
   return "other"
 }
@@ -56,7 +61,6 @@ export async function GET(req: Request) {
   }
 
   try {
-    // 1️⃣ Buscar links do usuário
     const links = await prisma.trackingLink.findMany({
       where: { userId },
       select: {
@@ -78,7 +82,6 @@ export async function GET(req: Request) {
 
     const linkIds = links.map((l) => l.id)
 
-    // 2️⃣ Buscar todos os cliques relacionados
     const clicks = await prisma.clickLog.findMany({
       where: {
         trackingLinkId: { in: linkIds },
@@ -91,7 +94,6 @@ export async function GET(req: Request) {
       },
     })
 
-    // 3️⃣ Inicializar estrutura
     const overviewChannels = emptyChannels()
 
     const byLinkMap: Record<
@@ -115,16 +117,13 @@ export async function GET(req: Request) {
       }
     })
 
-    // 4️⃣ Processar cliques
     clicks.forEach((click) => {
       if (!click.trackingLinkId) return
 
       const channel = classifyChannel(click)
 
-      // Overview
       overviewChannels[channel]++
 
-      // Por link
       const linkEntry = byLinkMap[click.trackingLinkId]
       if (linkEntry) {
         linkEntry.totalClicks++
@@ -132,11 +131,9 @@ export async function GET(req: Request) {
       }
     })
 
-    const overviewTotal = clicks.length
-
     return NextResponse.json({
       overview: {
-        totalClicks: overviewTotal,
+        totalClicks: clicks.length,
         channels: overviewChannels,
       },
       byLink: Object.values(byLinkMap),
