@@ -287,6 +287,11 @@ export default function LinksClient() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [viewLink, setViewLink] = useState<TrackingLink | null>(null)
 
+  function getClicksForLink(linkId: string) {
+    const found = metrics?.byLink.find((m) => m.id === linkId)
+    return found?.totalClicks ?? 0
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -369,7 +374,14 @@ export default function LinksClient() {
                     className="font-medium text-foreground truncate text-left hover:underline"
                     onClick={() => setViewLink(l)}
                   >
-                    {l.name}
+                    <span className="inline-flex items-center gap-2 min-w-0">
+                      <span className="truncate">{l.name}</span>
+                      {metrics && (
+                        <span className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground shrink-0">
+                          {getClicksForLink(l.id)} cliques
+                        </span>
+                      )}
+                    </span>
                   </button>
                   <div className="text-sm text-muted-foreground truncate">
                     <span className="font-mono">/{l.slug}</span> → {l.redirectUrl}
