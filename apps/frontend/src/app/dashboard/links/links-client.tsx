@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useEffect, useMemo, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import { Pencil, Archive, RotateCcw, BarChart3 } from "lucide-react"
 
 type TrackingLink = {
@@ -123,6 +123,71 @@ export default function LinksClient() {
   const [platformFilter, setPlatformFilter] = useState("")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
+
+  // Estados do WhatsApp + função de fetch do link para edição
+  type WhatsAppStatus = {
+    status?: string
+    connected: boolean
+    whatsappNumber?: string | null
+    whatsappJid?: string | null
+  }
+
+  function extractOfficialWhatsAppNumber(s: WhatsAppStatus | null | undefined) {
+    const jid = (s?.whatsappJid ?? "").trim()
+    if (jid) {
+      // Examples: "5521999391590:10@s.whatsapp.net" or "5521999391590@s.whatsapp.net"
+      const beforeAt = jid.split("@")[0] ?? ""
+      const beforeDevice = beforeAt.split(":")[0] ?? ""
+      const digits = beforeDevice.replace(/\D/g, "")
+      if (digits) return digits
+    }
+
+    const raw = (s?.whatsappNumber ?? "").trim()
+    if (!raw) return ""
+
+    // If it comes already with device suffix, remove non-digits then try to drop common suffix patterns.
+    const digits = raw.replace(/\D/g, "")
+    return digits
+  }
+
+  const [waStatus, setWaStatus] = useState<WhatsAppStatus | null>(null)
+  const [loadingWaStatus, setLoadingWaStatus] = useState(false)
+
+  const fetchWhatsAppStatus = useCallback(async () => {
+    try {
+      setLoadingWaStatus(true)
+
+      const res = await apiFetch("/api/whatsapp/status", { method: "GET" })
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(data?.error ?? "Erro ao buscar status do WhatsApp")
+      }
+
+      const normalized: WhatsAppStatus = {
+        connected: Boolean(data.connected),
+        status: typeof data.status === "string" ? data.status : undefined,
+        whatsappNumber: typeof data.whatsappNumber === "string" ? data.whatsappNumber : null,
+        whatsappJid: typeof data.whatsappJid === "string" ? data.whatsappJid : null,
+      }
+
+      setWaStatus(normalized)
+
+      // Fonte oficial: sempre usar o número do WhatsApp conectado (derivado do JID quando disponível)
+      if (normalized.connected) {
+        const official = extractOfficialWhatsAppNumber(normalized)
+        if (official) setWhatsappNumber(official)
+      }
+
+      return normalized
+    } catch (e) {
+      console.error(e)
+      setWaStatus({ connected: false, whatsappNumber: null, whatsappJid: null })
+      return null
+    } finally {
+      setLoadingWaStatus(false)
+    }
+  }, [])
 
   //Criar a função openEdit
   const [isEditing, setIsEditing] = useState(false)
@@ -805,7 +870,14 @@ export default function LinksClient() {
                 <div className="flex justify-end pt-2">
                   <button
                     className="btn-primary disabled:opacity-50"
-                    onClick={() => setStep(2)}
+                    onClick={async () => {
+                      const s = await fetchWhatsAppStatus()
+                      setStep(2)
+                      if (s?.connected) {
+                        const official = extractOfficialWhatsAppNumber(s)
+                        if (official) setWhatsappNumber(official)
+                      }
+                    }}
                     disabled={!name || !slug || !destinationUrl}
                   >
                     Próxima etapa →
@@ -820,13 +892,48 @@ export default function LinksClient() {
                   Etapa 2 — Configuração do WhatsApp
                 </p>
 
-                <input
-                  type="text"
-                  placeholder="WhatsApp (ex: 5521999999999)"
-                  value={whatsappNumber}
-                  onChange={(e) => setWhatsappNumber(e.target.value)}
-                  className="input"
-                />
+                <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-foreground">WhatsApp oficial</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        O número usado aqui é sempre o que estiver conectado no sistema.
+                      </p>
+                    </div>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => fetchWhatsAppStatus()}
+                      disabled={loadingWaStatus}
+                    >
+                      {loadingWaStatus ? "Verificando..." : "Verificar"}
+                    </button>
+                  </div>
+                  {/*
+                    WhatsApp number input (editable) removed.
+                    Only the read-only, disabled input below remains.
+                  */}
+                  <div className="mt-3">
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                      Número conectado
+                    </label>
+                    <input
+                      readOnly
+                      disabled
+                      className="input bg-background"
+                      value={
+                        waStatus?.connected
+                          ? extractOfficialWhatsAppNumber(waStatus) || "Não conectado"
+                          : "Não conectado"
+                      }
+                    />
+                  </div>
+                  {!waStatus?.connected && (
+                    <div className="mt-3 text-xs text-destructive">
+                      Conecte seu WhatsApp para gerar o link rastreado.
+                      <span className="text-muted-foreground"> (Dashboard → WhatsApp → Conectar)</span>
+                    </div>
+                  )}
+                </div>
 
                 <textarea
                   className="input"
@@ -846,13 +953,18 @@ export default function LinksClient() {
                   <button
                     className="btn-primary disabled:opacity-50"
                     onClick={() => {
-                     if (isEditing && createdLink?.id) {
-                      updateLink(createdLink.id)
-                     } else {
-                      createLink()
-                    }
+                      if (waStatus?.connected) {
+                        const official = extractOfficialWhatsAppNumber(waStatus)
+                        if (official) setWhatsappNumber(official)
+                      }
+
+                      if (isEditing && createdLink?.id) {
+                        updateLink(createdLink.id)
+                      } else {
+                        createLink()
+                      }
                     }}
-                    disabled={loading || !whatsappNumber || step !== 2}
+                    disabled={loading || !waStatus?.connected || !waStatus.whatsappNumber || step !== 2}
                   >
                     {isEditing ? "Salvar alterações →" : "Criar link →"}
                   </button>
