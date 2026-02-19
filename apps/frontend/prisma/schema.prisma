@@ -43,9 +43,13 @@ model WhatsAppSession {
   lastPingAt  DateTime?
   createdAt   DateTime  @default(now())
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  whatsappNumber String?
+  whatsappJid    String?
 
   @@index([userId])
   @@index([status])
+  @@index([whatsappNumber])
+  @@index([whatsappJid])
 }
 
 model TrackingLink {
@@ -130,4 +134,5 @@ model Conversation {
   @@index([clickLogId])
   @@index([createdAt])
   @@index([capiStatus])
+  
 }
