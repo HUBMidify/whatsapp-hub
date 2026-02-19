@@ -22,7 +22,6 @@ type TrackingLink = {
 
 type Tab = "active" | "archived"
 
-const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID
 
 async function apiFetch(input: RequestInfo, init?: RequestInit) {
   return fetch(input, {
@@ -30,7 +29,6 @@ async function apiFetch(input: RequestInfo, init?: RequestInit) {
     headers: {
       ...(init?.headers ?? {}),
       "Content-Type": "application/json",
-      "x-user-id": DEV_USER_ID ?? "",
     },
   })
 }
@@ -265,12 +263,6 @@ export default function LinksClient() {
     setLoading(true)
     setError(null)
     try {
-      if (!DEV_USER_ID) {
-        throw new Error(
-          "NEXT_PUBLIC_DEV_USER_ID não definido. Adicione no .env.local e reinicie o dev server."
-        )
-      }
-
       const res = await apiFetch(`/api/links${query}`, { method: "GET" })
       const data = await res.json().catch(() => ({}))
 
