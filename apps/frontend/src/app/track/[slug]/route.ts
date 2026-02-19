@@ -12,6 +12,13 @@ function getClientIp(request: Request) {
   return null
 }
 
+function buildWaMeUrlFromNumber(number: string, message: string) {
+  const cleanNumber = number.replace(/\D/g, "")
+  const clean = new URL(`https://wa.me/${cleanNumber}`)
+  if (message) clean.searchParams.set("text", message)
+  return clean.toString()
+}
+
 function buildWhatsAppRedirectUrl(baseRedirectUrl: string, message: string) {
   // IMPORTANT: never forward any existing query params (UTMs, fbclid, etc.) to WhatsApp.
   // We keep only the base (origin + pathname) and set `text`.
@@ -87,8 +94,21 @@ export async function GET(
   const message = trackingLink.preFilledMessage?.trim() || "Olá!"
 
   // 8) Redirecionar (302)
-  // S5.T3: este endpoint registra o click e redireciona usando redirectUrl.
-  const redirectTo = buildWhatsAppRedirectUrl(trackingLink.redirectUrl, message)
+  // Preferência: whatsappNumber. Fallback: destinationUrl (modo compatibilidade).
+  let redirectTo: string | null = null
+
+  if (trackingLink.whatsappNumber && trackingLink.whatsappNumber.trim() !== "") {
+    redirectTo = buildWaMeUrlFromNumber(trackingLink.whatsappNumber, message)
+  } else if (trackingLink.destinationUrl && trackingLink.destinationUrl.trim() !== "") {
+    redirectTo = buildWhatsAppRedirectUrl(trackingLink.destinationUrl, message)
+  }
+
+  if (!redirectTo) {
+    return new Response(
+      "Tracking link sem WhatsApp configurado (whatsappNumber/destinationUrl)",
+      { status: 400 }
+    )
+  }
 
   return Response.redirect(redirectTo, 302)
 }

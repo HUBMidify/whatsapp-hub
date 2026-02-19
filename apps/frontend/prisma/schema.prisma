@@ -52,20 +52,26 @@ model TrackingLink {
   id               String     @id @default(cuid())
   userId           String
   name             String
-  slug             String     @unique
-  redirectUrl      String
+  slug             String
+  destinationUrl   String?
   whatsappNumber   String?
   preFilledMessage String?
   utmSource        String?
+  utmMedium        String?
   utmCampaign      String?
+  utmTerm          String?
+  utmContent       String?
   archivedAt       DateTime?
   createdAt        DateTime   @default(now())
   clickLogs        ClickLog[]
   user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform         String?
 
   @@index([userId])
   @@index([slug])
   @@index([archivedAt])
+  @@index([platform])
+  @@unique([userId, slug])
 }
 
 model ClickLog {
@@ -76,7 +82,12 @@ model ClickLog {
   fbp            String?
   gclid          String?
   utmSource      String?
+  utmMedium      String?
   utmCampaign    String?
+  utmTerm        String?
+  utmContent     String?
+  gadSource      String?
+  referrer       String?
   ipAddress      String?
   userAgent      String?
   createdAt      DateTime       @default(now())
@@ -85,7 +96,9 @@ model ClickLog {
 
   @@index([trackingLinkId])
   @@index([fbclid])
+  @@index([gclid])
   @@index([createdAt])
+  @@index([trackingLinkId, createdAt])
 }
 
 model Lead {
