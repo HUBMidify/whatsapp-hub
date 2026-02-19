@@ -7,11 +7,15 @@ type TrackingLink = {
   id: string
   name: string
   slug: string
-  redirectUrl: string
+  platform: string | null
+  destinationUrl: string | null
   whatsappNumber: string | null
   preFilledMessage: string | null
   utmSource: string | null
+  utmMedium: string | null
   utmCampaign: string | null
+  utmTerm: string | null
+  utmContent: string | null
   archivedAt: string | null
   createdAt: string
 }
@@ -58,25 +62,54 @@ type MetricsResponse = {
 
 // Helper to build "link de divulgação" (destination URL + UTMs)
 function buildCampaignUrl(
-  redirectUrl: string,
-  utmSource?: string | null,
-  utmCampaign?: string | null
+  destinationUrl: string | null | undefined,
+  utms: {
+    utmSource?: string | null
+    utmMedium?: string | null
+    utmCampaign?: string | null
+    utmTerm?: string | null
+    utmContent?: string | null
+  }
 ) {
-  try {
-    const url = new URL(redirectUrl)
+  const base = (destinationUrl ?? "").trim()
+  if (!base) return ""
 
-    if (utmSource && utmSource.trim() !== "") {
-      url.searchParams.set("utm_source", utmSource.trim())
+  try {
+    const url = new URL(base)
+
+    const setIfFilled = (key: string, value?: string | null) => {
+      const v = (value ?? "").trim()
+      if (v) url.searchParams.set(key, v)
     }
-    if (utmCampaign && utmCampaign.trim() !== "") {
-      url.searchParams.set("utm_campaign", utmCampaign.trim())
-    }
+
+    setIfFilled("utm_source", utms.utmSource)
+    setIfFilled("utm_medium", utms.utmMedium)
+    setIfFilled("utm_campaign", utms.utmCampaign)
+    setIfFilled("utm_term", utms.utmTerm)
+    setIfFilled("utm_content", utms.utmContent)
 
     return url.toString()
   } catch {
-    // If redirectUrl is not a valid URL, return as-is (avoid crashing UI)
-    return redirectUrl
+    return base
   }
+}
+
+function slugify(input: string) {
+  return String(input)
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-z0-9-_\s]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+}
+
+function formatDateBR(iso: string) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return "—"
+  return d.toLocaleDateString("pt-BR")
 }
 
 export default function LinksClient() {
@@ -86,34 +119,48 @@ export default function LinksClient() {
   const [error, setError] = useState<string | null>(null)
   const [metrics, setMetrics] = useState<MetricsResponse | null>(null) //State para métricas
   const [loadingMetrics, setLoadingMetrics] = useState(true) //State para loading das métricas
+  const [search, setSearch] = useState("")
+  const [platformFilter, setPlatformFilter] = useState("")
+  const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
 
   //Criar a função openEdit
   const [isEditing, setIsEditing] = useState(false)
 
   function openEdit(link: TrackingLink) {
-  setOpen(true)
-  setIsEditing(true)
-  setCreatedLink(link) // para ter o id disponível
-  setStep(1)
+    setOpen(true)
+    setIsEditing(true)
+    setCreatedLink(link) // para ter o id disponível
+    setStep(1)
 
-  setName(link.name ?? "")
-  setSlug(link.slug ?? "")
-  setRedirectUrl(link.redirectUrl ?? "")
-  setWhatsappNumber(link.whatsappNumber ?? "")
-  setPreFilledMessage(link.preFilledMessage ?? "")
-  setUtmSource(link.utmSource ?? "")
-  setUtmCampaign(link.utmCampaign ?? "")
-}
+    setName(link.name ?? "")
+    setSlug(link.slug ?? "")
+    setSlugManuallyEdited(true)
+    setPlatform(link.platform ?? "")
+    setDestinationUrl(link.destinationUrl ?? "")
+    setWhatsappNumber(link.whatsappNumber ?? "")
+    setPreFilledMessage(link.preFilledMessage ?? "")
+    setUtmSource(link.utmSource ?? "")
+    setUtmMedium(link.utmMedium ?? "")
+    setUtmCampaign(link.utmCampaign ?? "")
+    setUtmTerm(link.utmTerm ?? "")
+    setUtmContent(link.utmContent ?? "")
+  }
 
   // Modal criar
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [slug, setSlug] = useState("")
-  const [redirectUrl, setRedirectUrl] = useState("")
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
+  const [platform, setPlatform] = useState("")
+  const [destinationUrl, setDestinationUrl] = useState("")
   const [whatsappNumber, setWhatsappNumber] = useState("")
   const [preFilledMessage, setPreFilledMessage] = useState("")
   const [utmSource, setUtmSource] = useState("")
+  const [utmMedium, setUtmMedium] = useState("")
   const [utmCampaign, setUtmCampaign] = useState("")
+  const [utmTerm, setUtmTerm] = useState("")
+  const [utmContent, setUtmContent] = useState("")
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [createdLink, setCreatedLink] = useState<TrackingLink | null>(null)
 
@@ -123,6 +170,31 @@ export default function LinksClient() {
     () => (tab === "archived" ? "?archived=true" : ""),
     [tab]
   )
+
+  const clearFilters = () => {
+    setSearch("")
+    setPlatformFilter("")
+    setStartDate("")
+    setEndDate("")
+  }
+
+  const filteredLinks = useMemo(() => {
+    const s = search.trim().toLowerCase()
+
+    return links.filter((l) => {
+      const nameMatch = (l.name ?? "").toLowerCase().includes(s)
+      const slugMatch = (l.slug ?? "").toLowerCase().includes(s)
+      const searchMatch = !s ? true : nameMatch || slugMatch
+
+      const platformMatch = platformFilter ? (l.platform ?? "") === platformFilter : true
+
+      const created = new Date(l.createdAt)
+      const startMatch = startDate ? created >= new Date(startDate) : true
+      const endMatch = endDate ? created <= new Date(endDate + "T23:59:59.999") : true
+
+      return searchMatch && platformMatch && startMatch && endMatch
+    })
+  }, [links, search, platformFilter, startDate, endDate])
 
   async function loadLinks() {
     setLoading(true)
@@ -153,6 +225,15 @@ export default function LinksClient() {
     loadLinks()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
+
+  useEffect(() => {
+    if (slugManuallyEdited) return
+    const suggested = slugify(name)
+    if (suggested && suggested !== slug) {
+      setSlug(suggested)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name])
 
   //useEffect para carregar métricas
   useEffect(() => {
@@ -185,11 +266,15 @@ export default function LinksClient() {
         body: JSON.stringify({
           name,
           slug,
-          redirectUrl,
+          platform: platform || null,
+          destinationUrl,
           whatsappNumber: whatsappNumber || null,
           preFilledMessage: preFilledMessage || null,
           utmSource: utmSource || null,
+          utmMedium: utmMedium || null,
           utmCampaign: utmCampaign || null,
+          utmTerm: utmTerm || null,
+          utmContent: utmContent || null,
         }),
       })
 
@@ -219,11 +304,15 @@ export default function LinksClient() {
           id,
           name,
           slug,
-          redirectUrl,
+          platform: platform || null,
+          destinationUrl,
           whatsappNumber: whatsappNumber || null,
           preFilledMessage: preFilledMessage || null,
           utmSource: utmSource || null,
+          utmMedium: utmMedium || null,
           utmCampaign: utmCampaign || null,
+          utmTerm: utmTerm || null,
+          utmContent: utmContent || null,
         }),
       })
 
@@ -242,11 +331,16 @@ export default function LinksClient() {
 
       setName("")
       setSlug("")
-      setRedirectUrl("")
+      setSlugManuallyEdited(false)
+      setPlatform("")
+      setDestinationUrl("")
       setWhatsappNumber("")
       setPreFilledMessage("")
       setUtmSource("")
+      setUtmMedium("")
       setUtmCampaign("")
+      setUtmTerm("")
+      setUtmContent("")
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro desconhecido")
     } finally {
@@ -358,110 +452,209 @@ export default function LinksClient() {
         </div>
       )}
 
-      <div className="bg-card text-card-foreground rounded-xl shadow-sm border border-border overflow-hidden">
-        <div className="px-4 py-3 border-b border-border text-sm text-muted-foreground">
-          {loading ? "Carregando..." : `${links.length} link(s)`}
+      {/* Filtros */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-4">
+        <div className="flex-1">
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Buscar
+          </label>
+          <input
+            className="input"
+            placeholder="Buscar por nome ou slug"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
 
-        <ul className="divide-y">
-          {links.map((l) => (
-            <Fragment key={l.id}>
-              <li
-                className="px-4 py-3 flex items-center justify-between gap-4"
-              >
-                <div className="min-w-0">
-                  <button
-                    className="font-medium text-foreground truncate text-left hover:underline"
-                    onClick={() => setViewLink(l)}
-                  >
-                    <span className="inline-flex items-center gap-2 min-w-0">
-                      <span className="truncate">{l.name}</span>
-                      {metrics && (
-                        <span className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground shrink-0">
-                          {getClicksForLink(l.id)} cliques
+        <div className="w-full md:w-56">
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Plataforma
+          </label>
+
+          <div className="relative">
+            <select
+              className="input w-full h-10 pr-10"
+              value={platformFilter}
+              onChange={(e) => setPlatformFilter(e.target.value)}
+            >
+              <option value="">Todas as plataformas</option>
+              <option value="meta">Meta Ads</option>
+              <option value="google">Google Ads</option>
+              <option value="social">Redes Sociais</option>
+              <option value="other">Outras</option>
+            </select>
+
+            <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-muted-foreground">
+              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  fillRule="evenodd"
+                  d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full md:w-44">
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Início
+          </label>
+          <input
+            className="input bg-background"
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
+        </div>
+
+        <div className="w-full md:w-44">
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Fim
+          </label>
+          <input
+            className="input bg-background"
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+          />
+        </div>
+
+        <button onClick={clearFilters} className="btn-secondary whitespace-nowrap">
+          Limpar filtros
+        </button>
+      </div>
+
+      <div className="bg-card text-card-foreground rounded-xl shadow-sm border border-border overflow-hidden">
+        <div className="px-4 py-3 border-b border-border text-sm text-muted-foreground">
+          {loading ? "Carregando..." : `${filteredLinks.length} link(s)`}
+        </div>
+
+        <div className="w-full overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-muted-foreground">
+              <tr className="border-b border-border">
+                <th className="text-left font-medium px-4 py-3 whitespace-nowrap">Criado em</th>
+                <th className="text-left font-medium px-4 py-3">Nome</th>
+                <th className="text-left font-medium px-4 py-3 whitespace-nowrap">Slug</th>
+                <th className="text-center font-medium px-4 py-3 whitespace-nowrap">Ações</th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y">
+              {filteredLinks.map((l) => (
+                <Fragment key={l.id}>
+                  <tr className="hover:bg-muted/30">
+                    <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
+                      {formatDateBR(l.createdAt)}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <button
+                        className="font-medium text-foreground text-left hover:underline"
+                        onClick={() => setViewLink(l)}
+                      >
+                        <span className="inline-flex items-center gap-2 min-w-0">
+                          <span className="truncate">{l.name}</span>
+                          {metrics && (
+                            <span className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground shrink-0">
+                              {getClicksForLink(l.id)} cliques
+                            </span>
+                          )}
                         </span>
-                      )}
-                    </span>
-                  </button>
-                  <div className="text-sm text-muted-foreground truncate">
-                    <span className="font-mono">/{l.slug}</span> → {l.redirectUrl}
-                  </div>
-                </div>
+                      </button>
+                    </td>
 
-                <div className="flex gap-2 shrink-0">
-                  <button
-                    className="w-9 h-9 flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted transition-colors disabled:opacity-50"
-                    onClick={() => setExpandedId(expandedId === l.id ? null : l.id)}
-                    title="Métricas"
-                    aria-label="Métricas"
-                  >
-                    <BarChart3 className="w-4 h-4" />
-                  </button>
+                    <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
+                      <span className="font-mono">/{l.slug}</span>
+                    </td>
 
-                  <button
-                    className="w-9 h-9 flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted transition-colors disabled:opacity-50"
-                    onClick={() => openEdit(l)}
-                    disabled={loading}
-                    title="Editar"
-                    aria-label="Editar"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          className="w-9 h-9 flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted transition-colors disabled:opacity-50"
+                          onClick={() => setExpandedId(expandedId === l.id ? null : l.id)}
+                          title="Métricas"
+                          aria-label="Métricas"
+                        >
+                          <BarChart3 className="w-4 h-4" />
+                        </button>
 
-                  {tab === "active" ? (
-                    <button
-                      className="w-9 h-9 flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted transition-colors disabled:opacity-50"
-                      onClick={() => {
-                        const ok = confirm("Arquivar este link?")
-                        if (ok) archiveLink(l.id)
-                      }}
-                      disabled={loading}
-                      title="Arquivar"
-                      aria-label="Arquivar"
-                    >
-                      <Archive className="w-4 h-4" />
-                    </button>
-                  ) : (
-                    <button
-                      className="w-9 h-9 flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted transition-colors disabled:opacity-50"
-                      onClick={() => restoreLink(l.id)}
-                      disabled={loading}
-                      title="Restaurar"
-                      aria-label="Restaurar"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </li>
-              {expandedId === l.id && metrics && (
-                <li className="px-4 py-4 bg-muted/50">
-                  {(() => {
-                    const linkMetrics = metrics.byLink.find(m => m.id === l.id)
-                    if (!linkMetrics) return <div className="text-sm text-muted-foreground">Sem dados</div>
+                        <button
+                          className="w-9 h-9 flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted transition-colors disabled:opacity-50"
+                          onClick={() => openEdit(l)}
+                          disabled={loading}
+                          title="Editar"
+                          aria-label="Editar"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
 
-                    return (
-                      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
-                        <div>Total: {linkMetrics.totalClicks}</div>
-                        <div>Meta: {linkMetrics.channels.meta}</div>
-                        <div>Google: {linkMetrics.channels.google}</div>
-                        <div>Social: {linkMetrics.channels.social}</div>
-                        <div>Other: {linkMetrics.channels.other}</div>
-                        <div>Untracked: {linkMetrics.channels.untracked}</div>
+                        {tab === "active" ? (
+                          <button
+                            className="w-9 h-9 flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted transition-colors disabled:opacity-50"
+                            onClick={() => {
+                              const ok = confirm("Arquivar este link?")
+                              if (ok) archiveLink(l.id)
+                            }}
+                            disabled={loading}
+                            title="Arquivar"
+                            aria-label="Arquivar"
+                          >
+                            <Archive className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            className="w-9 h-9 flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted transition-colors disabled:opacity-50"
+                            onClick={() => restoreLink(l.id)}
+                            disabled={loading}
+                            title="Restaurar"
+                            aria-label="Restaurar"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
-                    )
-                  })()}
-                </li>
-              )}
-            </Fragment>
-          ))}
+                    </td>
+                  </tr>
 
-          {!loading && links.length === 0 && (
-            <li className="px-4 py-10 text-sm text-muted-foreground">
-              Nenhum link encontrado.
-            </li>
-          )}
-        </ul>
+                  {expandedId === l.id && metrics && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-4 bg-muted/50">
+                        {(() => {
+                          const linkMetrics = metrics.byLink.find((m) => m.id === l.id)
+                          if (!linkMetrics)
+                            return (
+                              <div className="text-sm text-muted-foreground">Sem dados</div>
+                            )
+
+                          return (
+                            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
+                              <div>Total: {linkMetrics.totalClicks}</div>
+                              <div>Meta: {linkMetrics.channels.meta}</div>
+                              <div>Google: {linkMetrics.channels.google}</div>
+                              <div>Social: {linkMetrics.channels.social}</div>
+                              <div>Other: {linkMetrics.channels.other}</div>
+                              <div>Untracked: {linkMetrics.channels.untracked}</div>
+                            </div>
+                          )
+                        })()}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+
+              {!loading && filteredLinks.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-10 text-sm text-muted-foreground">
+                    Nenhum link encontrado.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {open && (
@@ -551,14 +744,29 @@ export default function LinksClient() {
                   className="input"
                   placeholder="Slug (ex: promo-verao)"
                   value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
+                  onChange={(e) => {
+                    setSlugManuallyEdited(true)
+                    setSlug(e.target.value)
+                  }}
                 />
+
+                <select
+                  className="input w-full h-10"
+                  value={platform}
+                  onChange={(e) => setPlatform(e.target.value)}
+                >
+                  <option value="">Plataforma (opcional)</option>
+                  <option value="meta">Meta Ads</option>
+                  <option value="google">Google Ads</option>
+                  <option value="social">Redes Sociais</option>
+                  <option value="other">Outras</option>
+                </select>
 
                 <input
                   className="input"
                   placeholder="URL de destino (https://...)"
-                  value={redirectUrl}
-                  onChange={(e) => setRedirectUrl(e.target.value)}
+                  value={destinationUrl}
+                  onChange={(e) => setDestinationUrl(e.target.value)}
                 />
 
                 <div className="grid grid-cols-2 gap-2">
@@ -570,9 +778,27 @@ export default function LinksClient() {
                   />
                   <input
                     className="input"
+                    placeholder="utm_medium (opcional)"
+                    value={utmMedium}
+                    onChange={(e) => setUtmMedium(e.target.value)}
+                  />
+                  <input
+                    className="input"
                     placeholder="utm_campaign (opcional)"
                     value={utmCampaign}
                     onChange={(e) => setUtmCampaign(e.target.value)}
+                  />
+                  <input
+                    className="input"
+                    placeholder="utm_term (opcional)"
+                    value={utmTerm}
+                    onChange={(e) => setUtmTerm(e.target.value)}
+                  />
+                  <input
+                    className="input"
+                    placeholder="utm_content (opcional)"
+                    value={utmContent}
+                    onChange={(e) => setUtmContent(e.target.value)}
                   />
                 </div>
 
@@ -580,7 +806,7 @@ export default function LinksClient() {
                   <button
                     className="btn-primary disabled:opacity-50"
                     onClick={() => setStep(2)}
-                    disabled={!name || !slug || !redirectUrl}
+                    disabled={!name || !slug || !destinationUrl}
                   >
                     Próxima etapa →
                   </button>
@@ -647,22 +873,26 @@ export default function LinksClient() {
                   <div className="flex gap-2">
                     <input
                       readOnly
-                      value={buildCampaignUrl(
-                        createdLink.redirectUrl,
-                        createdLink.utmSource,
-                        createdLink.utmCampaign
-                      )}
+                      value={buildCampaignUrl(createdLink.destinationUrl, {
+                        utmSource: createdLink.utmSource,
+                        utmMedium: createdLink.utmMedium,
+                        utmCampaign: createdLink.utmCampaign,
+                        utmTerm: createdLink.utmTerm,
+                        utmContent: createdLink.utmContent,
+                      })}
                       className="input text-sm"
                     />
                     <button
                       className="btn-secondary"
                       onClick={() =>
                         navigator.clipboard.writeText(
-                          buildCampaignUrl(
-                            createdLink.redirectUrl,
-                            createdLink.utmSource,
-                            createdLink.utmCampaign
-                          )
+                          buildCampaignUrl(createdLink.destinationUrl, {
+                            utmSource: createdLink.utmSource,
+                            utmMedium: createdLink.utmMedium,
+                            utmCampaign: createdLink.utmCampaign,
+                            utmTerm: createdLink.utmTerm,
+                            utmContent: createdLink.utmContent,
+                          })
                         )
                       }
                     >
@@ -711,11 +941,16 @@ export default function LinksClient() {
                       // reset form fields for next creation
                       setName("")
                       setSlug("")
-                      setRedirectUrl("")
+                      setSlugManuallyEdited(false)
+                      setPlatform("")
+                      setDestinationUrl("")
                       setWhatsappNumber("")
                       setPreFilledMessage("")
                       setUtmSource("")
+                      setUtmMedium("")
                       setUtmCampaign("")
+                      setUtmTerm("")
+                      setUtmContent("")
                     }}
                   >
                     Concluir
@@ -763,7 +998,7 @@ export default function LinksClient() {
 
               <div>
                 <p className="text-muted-foreground">URL de destino</p>
-                <p className="break-all">{viewLink.redirectUrl}</p>
+                <p className="break-all">{viewLink.destinationUrl ?? "—"}</p>
               </div>
 
               <div>
@@ -782,22 +1017,26 @@ export default function LinksClient() {
                 <div className="flex gap-2">
                   <input
                     readOnly
-                    value={buildCampaignUrl(
-                      viewLink.redirectUrl,
-                      viewLink.utmSource,
-                      viewLink.utmCampaign
-                    )}
+                    value={buildCampaignUrl(viewLink.destinationUrl, {
+                      utmSource: viewLink.utmSource,
+                      utmMedium: viewLink.utmMedium,
+                      utmCampaign: viewLink.utmCampaign,
+                      utmTerm: viewLink.utmTerm,
+                      utmContent: viewLink.utmContent,
+                    })}
                     className="input text-xs"
                   />
                   <button
                     className="btn-secondary"
                     onClick={() =>
                       navigator.clipboard.writeText(
-                        buildCampaignUrl(
-                          viewLink.redirectUrl,
-                          viewLink.utmSource,
-                          viewLink.utmCampaign
-                        )
+                        buildCampaignUrl(viewLink.destinationUrl, {
+                          utmSource: viewLink.utmSource,
+                          utmMedium: viewLink.utmMedium,
+                          utmCampaign: viewLink.utmCampaign,
+                          utmTerm: viewLink.utmTerm,
+                          utmContent: viewLink.utmContent,
+                        })
                       )
                     }
                   >

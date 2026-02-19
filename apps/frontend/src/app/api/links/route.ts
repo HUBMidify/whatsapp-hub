@@ -45,23 +45,31 @@ export async function POST(req: Request) {
   const {
     name,
     slug,
-    redirectUrl,
+    destinationUrl,
+    platform,
     whatsappNumber,
     preFilledMessage,
     utmSource,
+    utmMedium,
     utmCampaign,
+    utmTerm,
+    utmContent,
   } = body
 
-  const hasRedirectUrl = typeof redirectUrl === "string" && redirectUrl.trim() !== ""
+  const hasDestinationUrl =
+    typeof destinationUrl === "string" && destinationUrl.trim() !== ""
   const hasWhatsappNumber =
-  typeof whatsappNumber === "string" && whatsappNumber.trim() !== ""
+    typeof whatsappNumber === "string" && whatsappNumber.trim() !== ""
 
-  if (!name || !slug || (!hasRedirectUrl && !hasWhatsappNumber)) {
+  if (!name || !slug || (!hasDestinationUrl && !hasWhatsappNumber)) {
     return NextResponse.json(
-      { error: "Campos obrigatórios: name, slug e (redirectUrl ou whatsappNumber)" },
+      {
+        error:
+          "Campos obrigatórios: name, slug e (destinationUrl ou whatsappNumber)",
+      },
       { status: 400 }
     )
- }
+  }
 
   const normalizedSlug = String(slug)
     .trim()
@@ -81,11 +89,15 @@ export async function POST(req: Request) {
         userId,
         name,
         slug: normalizedSlug,
-        redirectUrl: hasRedirectUrl ? redirectUrl.trim() : "https://wa.me/",
+        destinationUrl: hasDestinationUrl ? destinationUrl.trim() : null,
+        platform: typeof platform === "string" && platform.trim() !== "" ? platform.trim() : null,
         whatsappNumber: normalizedWhatsappNumber,
         preFilledMessage: preFilledMessage ?? null,
         utmSource: utmSource ?? null,
+        utmMedium: utmMedium ?? null,
         utmCampaign: utmCampaign ?? null,
+        utmTerm: utmTerm ?? null,
+        utmContent: utmContent ?? null,
       },
     })
 
@@ -137,11 +149,15 @@ export async function PATCH(req: Request) {
     id,
     name,
     slug,
-    redirectUrl,
+    destinationUrl,
+    platform,
     whatsappNumber,
     preFilledMessage,
     utmSource,
+    utmMedium,
     utmCampaign,
+    utmTerm,
+    utmContent,
   } = body
 
   if (!id) {
@@ -161,11 +177,18 @@ export async function PATCH(req: Request) {
   const data: Record<string, unknown> = {}
 
   if (typeof name === "string") data.name = name
-  if (typeof redirectUrl === "string") data.redirectUrl = redirectUrl
+  if (typeof destinationUrl === "string") data.destinationUrl = destinationUrl
+  if (typeof platform !== "undefined") {
+    data.platform =
+      typeof platform === "string" && platform.trim() !== "" ? platform.trim() : null
+  }
   if (typeof preFilledMessage !== "undefined") data.preFilledMessage = preFilledMessage ?? null
   if (typeof whatsappNumber !== "undefined") data.whatsappNumber = whatsappNumber ?? null
   if (typeof utmSource !== "undefined") data.utmSource = utmSource ?? null
   if (typeof utmCampaign !== "undefined") data.utmCampaign = utmCampaign ?? null
+  if (typeof utmMedium !== "undefined") data.utmMedium = utmMedium ?? null
+  if (typeof utmTerm !== "undefined") data.utmTerm = utmTerm ?? null
+  if (typeof utmContent !== "undefined") data.utmContent = utmContent ?? null
   if (typeof normalizedSlug === "string" && normalizedSlug.length > 0) {
     data.slug = normalizedSlug
   }

@@ -57,7 +57,10 @@ model TrackingLink {
   whatsappNumber   String?
   preFilledMessage String?
   utmSource        String?
+  utmMedium        String?
   utmCampaign      String?
+  utmTerm          String?
+  utmContent       String?
   archivedAt       DateTime?
   createdAt        DateTime   @default(now())
   clickLogs        ClickLog[]
@@ -79,7 +82,12 @@ model ClickLog {
   fbp            String?
   gclid          String?
   utmSource      String?
+  utmMedium      String?
   utmCampaign    String?
+  utmTerm        String?
+  utmContent     String?
+  gadSource      String?
+  referrer       String?
   ipAddress      String?
   userAgent      String?
   createdAt      DateTime       @default(now())
@@ -88,6 +96,7 @@ model ClickLog {
 
   @@index([trackingLinkId])
   @@index([fbclid])
+  @@index([gclid])
   @@index([createdAt])
   @@index([trackingLinkId, createdAt])
 }
