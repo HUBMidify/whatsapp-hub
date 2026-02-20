@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server"
 import { PrismaClient } from "@prisma/client"
+import { authOptions } from "@/lib/auth"
+import { getServerSession } from "next-auth"
 
 const prisma = new PrismaClient()
-
-function getUserId(req: Request) {
-  return req.headers.get("x-user-id")
-}
 
 type ClickForChannel = {
   trackingLinkId: string | null
@@ -53,8 +51,23 @@ function emptyChannels() {
   }
 }
 
-export async function GET(req: Request) {
-  const userId = getUserId(req)
+async function resolveUserId(request: Request): Promise<string | null> {
+  try {
+    const session = await getServerSession(authOptions)
+    const sessionUserId = (session?.user as { id?: string } | undefined)?.id
+    if (typeof sessionUserId === "string" && sessionUserId) return sessionUserId
+  } catch {
+    // ignore
+  }
+
+  const headerUserId = request.headers.get("x-user-id")
+  if (headerUserId) return headerUserId
+
+  return null
+}
+
+export async function GET(request: Request) {
+  const userId = await resolveUserId(request)
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

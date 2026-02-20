@@ -1,20 +1,36 @@
 import { NextResponse } from "next/server"
 import { PrismaClient } from "@prisma/client"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 
 const prisma = new PrismaClient()
 
-function getUserId(req: Request) {
-  return req.headers.get("x-user-id")
+
+async function resolveUserId(request: Request): Promise<string | null> {
+  // Produção/Preview: sessão do NextAuth
+  try {
+    const session = await getServerSession(authOptions)
+    const sessionUserId = (session?.user as { id?: string } | undefined)?.id
+    if (typeof sessionUserId === "string" && sessionUserId) return sessionUserId
+  } catch {
+    // ignora e tenta fallback
+  }
+
+  // Dev/Curl fallback
+  const headerUserId = request.headers.get("x-user-id")
+  if (headerUserId) return headerUserId
+
+  return null
 }
 
 // LISTAR LINKS (somente não arquivados)
-export async function GET(req: Request) {
-  const userId = getUserId(req)
+export async function GET(request: Request) {
+  const userId = await resolveUserId(request)
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const { searchParams } = new URL(req.url)
+  const { searchParams } = new URL(request.url)
   const archived = searchParams.get("archived") // "true" | null
 
   const where =
@@ -31,13 +47,13 @@ export async function GET(req: Request) {
 }
 
 // CRIAR LINK
-export async function POST(req: Request) {
-  const userId = getUserId(req)
+export async function POST(request: Request) {
+  const userId = await resolveUserId(request)
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const body = await req.json().catch(() => null)
+  const body = await request.json().catch(() => null)
   if (!body) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
@@ -134,13 +150,13 @@ return NextResponse.json({ error: "Erro ao criar link" }, { status: 500 })
 }
 
 // EDITAR LINK (PATCH no mesmo endpoint)
-export async function PATCH(req: Request) {
-  const userId = getUserId(req)
+export async function PATCH(request: Request) {
+  const userId = await resolveUserId(request)
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const body = await req.json().catch(() => null)
+  const body = await request.json().catch(() => null)
   if (!body) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
