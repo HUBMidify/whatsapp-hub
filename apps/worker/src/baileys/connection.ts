@@ -15,7 +15,29 @@ import { handleIncomingMessage } from "./messageHandler"
 const prisma = new PrismaClient()
 
 const activeConnections = new Map<string, WASocket>()
-const pendingConnections = new Set<string>()
+
+// Evita ficar preso em `pending` para sempre: cada pendência expira automaticamente.
+const pendingConnections = new Map<string, NodeJS.Timeout>()
+
+function setPending(userId: string, ttlMs = 45_000) {
+  const prev = pendingConnections.get(userId)
+  if (prev) clearTimeout(prev)
+
+  const t = setTimeout(() => {
+    console.warn(`⏱️ Pending expirou para ${userId}. Limpando estado.`)
+    pendingConnections.delete(userId)
+    // se existia um socket meia-boca, garantimos limpeza
+    activeConnections.delete(userId)
+  }, ttlMs)
+
+  pendingConnections.set(userId, t)
+}
+
+function clearPending(userId: string) {
+  const t = pendingConnections.get(userId)
+  if (t) clearTimeout(t)
+  pendingConnections.delete(userId)
+}
 
 export function getWhatsAppConnectionStatus(userId: string): {
   status: "connected" | "pending" | "disconnected"
@@ -46,7 +68,7 @@ export async function disconnectWhatsApp(userId: string): Promise<{
   status: "disconnected"
 }> {
   // Remove from pending (if any)
-  pendingConnections.delete(userId)
+  clearPending(userId)
 
   const sock = activeConnections.get(userId)
 
@@ -154,7 +176,7 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
       }
     }
 
-    pendingConnections.add(userId)
+    setPending(userId)
     console.log(`📱 Iniciando conexão WhatsApp para usuário: ${userId}`)
 
     const authFolder = `./auth_sessions/${userId}`
@@ -191,7 +213,7 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
 
       if (connection === "open") {
         console.log("✅ WhatsApp conectado!")
-        pendingConnections.delete(userId)
+        clearPending(userId)
 
         // Extrai JID e número limpo do usuário conectado
         const jid = sock.user?.id ?? null // ex: 5521999391590:10@s.whatsapp.net
@@ -230,7 +252,7 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
       }
 
       if (connection === "close") {
-        pendingConnections.delete(userId)
+        clearPending(userId)
         activeConnections.delete(userId)
 
         // Mantém o banco consistente quando a conexão cai
@@ -283,7 +305,7 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
     }
 
     if (sock.user) {
-      pendingConnections.delete(userId)
+      clearPending(userId)
       return {
         qrCode: "",
         status: "connected",
@@ -291,14 +313,14 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
       }
     }
 
-    pendingConnections.delete(userId)
+    clearPending(userId)
     return {
       qrCode: "",
       status: "error",
       message: "Timeout ao gerar QR Code",
     }
   } catch (error) {
-    pendingConnections.delete(userId)
+    clearPending(userId)
     console.error("❌ Erro ao conectar WhatsApp:", error)
     return {
       qrCode: "",
