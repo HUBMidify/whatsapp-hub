@@ -48,6 +48,8 @@ model WhatsAppSession {
   status      String   @default("DISCONNECTED") // CONNECTED/DISCONNECTED
   lastPingAt  DateTime?
   createdAt   DateTime @default(now())
+  whatsappNumber String?
+  whatsappJid    String?
 
   // Relação
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
