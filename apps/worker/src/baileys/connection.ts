@@ -112,6 +112,33 @@ interface QRResponse {
 export async function connectWhatsApp(userId: string): Promise<QRResponse> {
   try {
     if (activeConnections.has(userId)) {
+      const sock = activeConnections.get(userId)
+      const jid = sock?.user?.id ?? null
+      const number = jid ? jid.split(":")[0] : null
+
+      // Mantém o banco consistente com o estado em memória
+      try {
+        const existing = await prisma.whatsAppSession.findFirst({
+          where: { userId },
+          orderBy: { createdAt: "desc" },
+          select: { id: true },
+        })
+
+        if (existing) {
+          await prisma.whatsAppSession.update({
+            where: { id: existing.id },
+            data: {
+              status: "CONNECTED",
+              lastPingAt: new Date(),
+              whatsappJid: jid,
+              whatsappNumber: number,
+            },
+          })
+        }
+      } catch (e) {
+        console.warn("⚠️  Falha ao sincronizar status CONNECTED no banco:", e)
+      }
+
       return {
         qrCode: "",
         status: "connected",
@@ -205,6 +232,16 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
       if (connection === "close") {
         pendingConnections.delete(userId)
         activeConnections.delete(userId)
+
+        // Mantém o banco consistente quando a conexão cai
+        try {
+          await prisma.whatsAppSession.updateMany({
+            where: { userId },
+            data: { status: "DISCONNECTED", lastPingAt: new Date() },
+          })
+        } catch (e) {
+          console.warn("⚠️  Falha ao marcar DISCONNECTED no banco:", e)
+        }
 
         const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut
