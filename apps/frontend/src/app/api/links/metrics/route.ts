@@ -120,7 +120,7 @@ export async function GET(request: Request) {
       }
     > = {}
 
-    links.forEach((link) => {
+    links.forEach((link: (typeof links)[number]) => {
       byLinkMap[link.id] = {
         id: link.id,
         name: link.name,
