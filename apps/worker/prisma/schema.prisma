@@ -22,6 +22,24 @@ model User {
   @@index([email])
 }
 
+enum OriginLabel {
+  META_ADS
+  GOOGLE_ADS
+  SOCIAL
+  OTHER
+  UNTRACKED
+}
+
+enum OriginReason {
+  GCLID
+  FBCLID
+  FBC
+  PLATFORM
+  UTM_REGEX
+  FALLBACK_MATCHED
+  UNTRACKED
+}
+
 model MetaAccount {
   id             String   @id @default(cuid())
   userId         String
@@ -80,6 +98,7 @@ model TrackingLink {
 
 model ClickLog {
   id             String         @id @default(cuid())
+  shortId        String? @unique
   trackingLinkId String?
   fbclid         String?
   fbc            String?
@@ -123,6 +142,9 @@ model Conversation {
   messageText     String
   matchMethod     String?
   matchConfidence Float?
+  originLabel     OriginLabel?
+  originReason    OriginReason?
+  clickToMessageLatencySeconds Int?
   capiEventId     String?
   capiStatus      String?
   capiSentAt      DateTime?
