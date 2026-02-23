@@ -93,7 +93,7 @@ export async function GET(request: Request) {
       })
     }
 
-    const linkIds = links.map((l) => l.id)
+    const linkIds = links.map((l: { id: string }) => l.id)
 
     const clicks = await prisma.clickLog.findMany({
       where: {
