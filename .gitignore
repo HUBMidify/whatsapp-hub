@@ -27,3 +27,4 @@ apps/*/prisma/migrations/
 
 # WhatsApp worker sessions
 apps/worker/prisma/seed.js
+apps/frontend/prisma/
