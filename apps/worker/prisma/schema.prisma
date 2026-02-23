@@ -3,137 +3,136 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
-// 1. User - Clientes da plataforma
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  password  String   // Hash bcrypt
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relações
-  metaAccounts      MetaAccount[]
-  whatsAppSessions  WhatsAppSession[]
-  trackingLinks     TrackingLink[]
+  id               String            @id @default(cuid())
+  email            String            @unique
+  name             String
+  password         String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  metaAccounts     MetaAccount[]
+  trackingLinks    TrackingLink[]
+  whatsAppSessions WhatsAppSession[]
 
   @@index([email])
 }
 
-// 2. MetaAccount - Conexão OAuth Meta
 model MetaAccount {
-  id             String    @id @default(cuid())
+  id             String   @id @default(cuid())
   userId         String
-  accessToken    String    // Criptografado
+  accessToken    String
   pixelId        String
   adAccountId    String
   tokenExpiresAt DateTime
-  createdAt      DateTime  @default(now())
-
-  // Relação
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
-// 3. WhatsAppSession - Sessões Baileys
 model WhatsAppSession {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
-  credentials Json     // JSON com credenciais Baileys
-  status      String   @default("DISCONNECTED") // CONNECTED/DISCONNECTED
+  credentials Json
+  status      String    @default("DISCONNECTED")
   lastPingAt  DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   whatsappNumber String?
   whatsappJid    String?
 
-  // Relação
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@index([userId])
   @@index([status])
+  @@index([whatsappNumber])
+  @@index([whatsappJid])
 }
 
-// 4. TrackingLink - Links rastreados
 model TrackingLink {
-  id               String   @id @default(cuid())
+  id               String     @id @default(cuid())
   userId           String
   name             String
-  slug             String   @unique
-  redirectUrl      String
+  slug             String
+  destinationUrl   String?
+  whatsappNumber   String?
   preFilledMessage String?
   utmSource        String?
+  utmMedium        String?
   utmCampaign      String?
-  createdAt        DateTime @default(now())
-
-  // Relações
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clickLogs ClickLog[]
+  utmTerm          String?
+  utmContent       String?
+  archivedAt       DateTime?
+  createdAt        DateTime   @default(now())
+  clickLogs        ClickLog[]
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform         String?
 
   @@index([userId])
   @@index([slug])
+  @@index([archivedAt])
+  @@index([platform])
+  @@unique([userId, slug])
 }
 
-// 5. ClickLog - Cliques capturados
 model ClickLog {
-  id             String   @id @default(cuid())
+  id             String         @id @default(cuid())
   trackingLinkId String?
   fbclid         String?
   fbc            String?
   fbp            String?
   gclid          String?
   utmSource      String?
+  utmMedium      String?
   utmCampaign    String?
+  utmTerm        String?
+  utmContent     String?
+  gadSource      String?
+  referrer       String?
   ipAddress      String?
   userAgent      String?
-  createdAt      DateTime @default(now())
-
-  // Relações
-  trackingLink TrackingLink? @relation(fields: [trackingLinkId], references: [id], onDelete: SetNull)
-  conversations Conversation[]
+  createdAt      DateTime       @default(now())
+  trackingLink   TrackingLink?  @relation(fields: [trackingLinkId], references: [id])
+  conversations  Conversation[]
 
   @@index([trackingLinkId])
   @@index([fbclid])
+  @@index([gclid])
   @@index([createdAt])
+  @@index([trackingLinkId, createdAt])
 }
 
-// 6. Lead - Números WhatsApp
 model Lead {
-  id          String   @id @default(cuid())
-  phone       String   @unique
-  name        String?
-  firstSeenAt DateTime @default(now())
-  lastSeenAt  DateTime @updatedAt
-
-  // Relação
+  id            String         @id @default(cuid())
+  phone         String         @unique
+  name          String?
+  firstSeenAt   DateTime       @default(now())
+  lastSeenAt    DateTime       @updatedAt
   conversations Conversation[]
 
   @@index([phone])
 }
 
-// 7. Conversation - Mensagens + match
 model Conversation {
   id              String    @id @default(cuid())
   leadId          String
   clickLogId      String?
   messageText     String
-  matchMethod     String?   // FBCLID/PHONE/MANUAL/ORGANIC
-  matchConfidence Float?    // 0.0 - 1.0
+  matchMethod     String?
+  matchConfidence Float?
   capiEventId     String?
-  capiStatus      String?   // PENDING/SENT/FAILED
+  capiStatus      String?
   capiSentAt      DateTime?
   createdAt       DateTime  @default(now())
-
-  // Relações
-  lead     Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  clickLog ClickLog? @relation(fields: [clickLogId], references: [id], onDelete: SetNull)
+  clickLog        ClickLog? @relation(fields: [clickLogId], references: [id])
+  lead            Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([leadId])
   @@index([clickLogId])
   @@index([createdAt])
   @@index([capiStatus])
+  
 }
