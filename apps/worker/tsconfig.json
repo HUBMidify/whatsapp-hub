@@ -8,5 +8,16 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "exclude": ["src/index_BKP.ts", "**/*.BKP.ts", "**/*_BKP.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "prisma",
+    "src/index_BKP.ts",
+    "**/*.BKP.ts",
+    "**/*_BKP.ts"
+  ],
+  "scripts": {
+  "build": "prisma generate && tsc -p tsconfig.json"
+  }
 }
