@@ -97,7 +97,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const navItems: NavItem[] = useMemo(
     () => [
       { label: 'Visão geral', href: '/dashboard/overview', icon: LayoutDashboard, exact: true },
-      { label: 'Leads', href: '/dashboard', icon: MessageSquare, exact: true },
+      { label: 'Leads', href: '/dashboard/leads', icon: MessageSquare, exact: true },
       { label: 'Conectar WhatsApp', href: '/dashboard/whatsapp/connect', icon: QrCode },
       { label: 'Links rastreados', href: '/dashboard/links', icon: LinkIcon },
       { label: 'Funil', href: '/dashboard/pipeline', icon: KanbanSquare },
