@@ -1,7 +1,28 @@
 import { WAMessage, WASocket } from '@whiskeysockets/baileys';
 import { PrismaClient, Prisma } from '@prisma/client';
+import { runAttributionMatch } from "../attribution/attributionEngine";
 
 const prisma = new PrismaClient();
+
+type BaileysMessageTimestamp = number | string | bigint | { toNumber: () => number };
+
+function getBaileysMessageDate(message: WAMessage): Date {
+  // Baileys uses seconds-based timestamps (often a Long-like value)
+  const raw = (message as unknown as { messageTimestamp?: BaileysMessageTimestamp }).messageTimestamp;
+  if (raw === undefined || raw === null) return new Date();
+
+  const n =
+    typeof raw === "number" ? raw :
+    typeof raw === "bigint" ? Number(raw) :
+    typeof raw === "string" ? Number(raw) :
+    raw && typeof raw === "object" && "toNumber" in raw ? raw.toNumber() :
+    Number(raw as unknown);
+
+  if (!Number.isFinite(n) || n <= 0) return new Date();
+
+  // messageTimestamp is in seconds
+  return new Date(n * 1000);
+}
 
 export async function handleIncomingMessage(message: WAMessage, sock?: WASocket) {
   try {
@@ -12,6 +33,8 @@ export async function handleIncomingMessage(message: WAMessage, sock?: WASocket)
     if (message.key.remoteJid?.includes('@g.us')) {
       return;
     }
+
+    const messageDate = getBaileysMessageDate(message);
 
     const rawJid = message.key.remoteJid || '';
     
@@ -52,13 +75,13 @@ export async function handleIncomingMessage(message: WAMessage, sock?: WASocket)
         data: {
           phone,
           name: contactName,
-          firstSeenAt: new Date(),
-          lastSeenAt: new Date()
+          firstSeenAt: messageDate,
+          lastSeenAt: messageDate
         }
       });
       console.log(`✅ Lead criado: ${phone}${contactName ? ` (${contactName})` : ''}`);
     } else {
-      const updateData: Prisma.LeadUpdateInput = { lastSeenAt: new Date() };
+      const updateData: Prisma.LeadUpdateInput = { lastSeenAt: messageDate };
       if (!lead.name && contactName) {
         updateData.name = contactName;
       }
@@ -69,16 +92,77 @@ export async function handleIncomingMessage(message: WAMessage, sock?: WASocket)
       });
     }
 
+    // =====================================================
+    // Attribution (Waterfall)
+    // =====================================================
+    // whatsappNumber = the business number that received this inbound message (from the active Baileys session)
+    const jid = sock?.user?.id ?? null; // ex: 5521999391590:10@s.whatsapp.net
+    const whatsappNumber = jid ? jid.split(":")[0] : null;
+
+    const attribution = await runAttributionMatch({
+      prisma,
+      messageText,
+      messageDate,
+      whatsappNumber,
+    });
+
+    const {
+      cleanedMessageText,
+      clickLogId,
+      matchMethod,
+      matchConfidence,
+      originLabel,
+      originReason,
+      clickToMessageLatencySeconds,
+    } = attribution;
+
     const conversation = await prisma.conversation.create({
       data: {
         leadId: lead.id,
-        messageText,
-        matchMethod: 'ORGANIC',
-        matchConfidence: 0
+        messageText: cleanedMessageText,
+        clickLogId,
+        matchMethod,
+        matchConfidence,
+        originLabel,
+        originReason,
+        clickToMessageLatencySeconds,
+        createdAt: messageDate,
       }
     });
 
     console.log(`✅ Conversa salva: ID ${conversation.id}`);
+
+    // =====================================================
+    // Persist Attribution State on Lead (First + Last Non-Direct)
+    // =====================================================
+    if (
+      conversation.originLabel &&
+      conversation.originLabel !== "UNTRACKED"
+    ) {
+      const currentLead = await prisma.lead.findUnique({
+        where: { id: lead.id },
+        select: {
+          firstTrackedConversationId: true,
+        },
+      });
+
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: {
+          // Always update lastTracked
+          lastTrackedConversationId: conversation.id,
+          lastTrackedOriginLabel: conversation.originLabel,
+
+          // Only set firstTracked if not already defined
+          ...(currentLead?.firstTrackedConversationId
+            ? {}
+            : {
+                firstTrackedConversationId: conversation.id,
+                firstTrackedOriginLabel: conversation.originLabel,
+              }),
+        },
+      });
+    }
 
   } catch (error) {
     console.error('❌ Erro ao processar mensagem:', error);

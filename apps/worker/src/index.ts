@@ -6,7 +6,7 @@ import { PrismaClient } from '@prisma/client';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = Number(process.env.PORT) || 3001;
 const prisma = new PrismaClient();
 
 app.use(express.json());
@@ -110,7 +110,7 @@ async function autoConnectWhatsApp() {
   }
 }
 
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Worker rodando na porta ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/health`);
   console.log(`📱 QR Code: http://localhost:${PORT}/qrcode/{userId}`);

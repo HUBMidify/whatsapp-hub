@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 const WORKER_URL = process.env.WORKER_URL || "http://localhost:3001";
 
 export async function GET() {

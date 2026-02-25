@@ -2,3 +2,4 @@ node_modules/
 dist/
 .env
 auth_sessions/
+apps/worker/prisma/seed.js
