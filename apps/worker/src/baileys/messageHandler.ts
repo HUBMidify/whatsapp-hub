@@ -132,6 +132,38 @@ export async function handleIncomingMessage(message: WAMessage, sock?: WASocket)
 
     console.log(`✅ Conversa salva: ID ${conversation.id}`);
 
+    // =====================================================
+    // Persist Attribution State on Lead (First + Last Non-Direct)
+    // =====================================================
+    if (
+      conversation.originLabel &&
+      conversation.originLabel !== "UNTRACKED"
+    ) {
+      const currentLead = await prisma.lead.findUnique({
+        where: { id: lead.id },
+        select: {
+          firstTrackedConversationId: true,
+        },
+      });
+
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: {
+          // Always update lastTracked
+          lastTrackedConversationId: conversation.id,
+          lastTrackedOriginLabel: conversation.originLabel,
+
+          // Only set firstTracked if not already defined
+          ...(currentLead?.firstTrackedConversationId
+            ? {}
+            : {
+                firstTrackedConversationId: conversation.id,
+                firstTrackedOriginLabel: conversation.originLabel,
+              }),
+        },
+      });
+    }
+
   } catch (error) {
     console.error('❌ Erro ao processar mensagem:', error);
   }

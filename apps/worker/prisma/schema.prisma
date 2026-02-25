@@ -132,7 +132,16 @@ model Lead {
   lastSeenAt    DateTime       @updatedAt
   conversations Conversation[]
 
+  // Attribution state (persisted)
+  firstTrackedConversationId String?
+  firstTrackedOriginLabel    OriginLabel?
+
+  lastTrackedConversationId  String?
+  lastTrackedOriginLabel     OriginLabel?
+
   @@index([phone])
+  @@index([firstTrackedOriginLabel])
+  @@index([lastTrackedOriginLabel])
 }
 
 model Conversation {
