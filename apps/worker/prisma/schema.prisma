@@ -96,10 +96,36 @@ model TrackingLink {
   @@unique([userId, slug])
 }
 
+model ClickSession {
+  id          String   @id @default(cuid())
+  sessionId   String   @unique
+  gclid       String?
+  fbclid      String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+  userAgent   String?
+  ip          String?
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @updatedAt
+
+  clickLogs   ClickLog[]
+
+  @@index([gclid])
+  @@index([fbclid])
+  @@index([firstSeenAt])
+  @@index([lastSeenAt])
+}
+
+
 model ClickLog {
   id             String         @id @default(cuid())
   shortId        String? @unique
   trackingLinkId String?
+  clickSessionId String?
+  clickSession   ClickSession? @relation(fields: [clickSessionId], references: [id])
   fbclid         String?
   fbc            String?
   fbp            String?
@@ -118,6 +144,7 @@ model ClickLog {
   conversations  Conversation[]
 
   @@index([trackingLinkId])
+  @@index([clickSessionId])
   @@index([fbclid])
   @@index([gclid])
   @@index([createdAt])
