@@ -106,6 +106,8 @@ export async function GET(
 
   // 3) Extrair query params
   const url = new URL(request.url)
+  const mcSidRaw = url.searchParams.get("mc_sid")
+  const mcSid = mcSidRaw ? decodeURIComponent(mcSidRaw).trim() : null
   const fbclid = url.searchParams.get("fbclid")
   const gclid = url.searchParams.get("gclid")
   const utmSource = url.searchParams.get("utm_source")
@@ -114,16 +116,63 @@ export async function GET(
   const utmTerm = url.searchParams.get("utm_term")
   const utmContent = url.searchParams.get("utm_content")
 
+  // Effective params (may be enriched from ClickSession if missing on /track URL)
+  let effFbclid = fbclid
+  let effGclid = gclid
+  let effUtmSource = utmSource
+  let effUtmMedium = utmMedium
+  let effUtmCampaign = utmCampaign
+  let effUtmContent = utmContent
+  let effUtmTerm = utmTerm
+
   // 4) Extrair headers / metadados
   const userAgent = request.headers.get("user-agent")
   const ipAddress = getClientIp(request)
+
+  // 4.5) Resolver ClickSession (Sprint 6.5)
+  // IMPORTANT: ClickSession is infrastructure only. It must not change attribution logic.
+  // We only associate it to the ClickLog if it exists.
+  let clickSessionId: string | null = null
+  if (mcSid) {
+    try {
+      const session = await prisma.clickSession.findFirst({
+        where: { sessionId: mcSid },
+        select: {
+          id: true,
+          gclid: true,
+          fbclid: true,
+          utmSource: true,
+          utmMedium: true,
+          utmCampaign: true,
+          utmContent: true,
+          utmTerm: true,
+        },
+      })
+      clickSessionId = session?.id ?? null
+      // Sprint 6.5 debug log removed
+
+      // Fallback: if /track URL doesn't include UTMs/click ids, enrich from ClickSession
+      if (session) {
+        if (!effFbclid && session.fbclid) effFbclid = session.fbclid
+        if (!effGclid && session.gclid) effGclid = session.gclid
+        if (!effUtmSource && session.utmSource) effUtmSource = session.utmSource
+        if (!effUtmMedium && session.utmMedium) effUtmMedium = session.utmMedium
+        if (!effUtmCampaign && session.utmCampaign) effUtmCampaign = session.utmCampaign
+        if (!effUtmContent && session.utmContent) effUtmContent = session.utmContent
+        if (!effUtmTerm && session.utmTerm) effUtmTerm = session.utmTerm
+      }
+    } catch (e) {
+      // never block the redirect if session lookup fails
+      console.warn("[track] ClickSession lookup failed:", e)
+    }
+  }
 
   // Referer existe, mas seu schema atual não tem campo "referrer"
   const _referrer = request.headers.get("referer") // capturado para futuro upgrade
   void _referrer
 
   // 5) Calcular fbc (se fbclid existe)
-  const fbc = fbclid ? `fb.1.${Date.now()}.${fbclid}` : null
+  const fbc = effFbclid ? `fb.1.${Date.now()}.${effFbclid}` : null
 
   // 6) Gerar shortId + salvar ClickLog.
   // Idealmente, criamos o ClickLog antes do redirect para garantir que o ID embutido na mensagem exista no banco.
@@ -134,22 +183,38 @@ export async function GET(
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      await prisma.clickLog.create({
+      // Sprint 6.5 debug log removed
+      const created = await prisma.clickLog.create({
         data: {
           shortId,
           trackingLinkId: trackingLink.id,
-          fbclid,
+          clickSessionId,
+          fbclid: effFbclid,
           fbc,
-          gclid,
-          utmSource,
-          utmMedium,
-          utmCampaign,
-          utmTerm,
-          utmContent,
+          gclid: effGclid,
+          utmSource: effUtmSource,
+          utmMedium: effUtmMedium,
+          utmCampaign: effUtmCampaign,
+          utmTerm: effUtmTerm,
+          utmContent: effUtmContent,
           ipAddress,
           userAgent,
         },
+        select: {
+          id: true,
+          createdAt: true,
+          clickSessionId: true,
+          fbclid: true,
+          gclid: true,
+          utmSource: true,
+          utmMedium: true,
+          utmCampaign: true,
+          utmContent: true,
+          utmTerm: true,
+        },
       });
+
+      // Sprint 6.5 debug log removed
 
       clickLogCreated = true;
       break;
