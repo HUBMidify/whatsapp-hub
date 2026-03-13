@@ -40,7 +40,7 @@ export default function LoginPage() {
         <div className="relative hidden md:block bg-muted">
           <div className="absolute inset-0">
             <img
-              src="/login/hero.svg"
+              src="/login/auth_banner.svg"
               alt=""
               className="h-full w-full object-cover"
               draggable={false}
