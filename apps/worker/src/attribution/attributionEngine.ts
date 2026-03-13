@@ -84,6 +84,21 @@ function classifyOriginFromClick(click: {
   if (click.fbclid) return { originLabel: OriginLabel.META_ADS, originReason: OriginReason.FBCLID };
   if (click.fbc) return { originLabel: OriginLabel.META_ADS, originReason: OriginReason.FBC };
 
+  // Regra 2: UTM Source direta (prioridade alta para LP / campanhas)
+  const src = normalizeUtm(click.utmSource);
+
+  if (/(google|youtube|yt|gads|pmax|demandgen|display)/.test(src)) {
+    return { originLabel: OriginLabel.GOOGLE_ADS, originReason: OriginReason.UTM_REGEX };
+  }
+
+  if (/(facebook|fb|instagram|ig|threads|meta|meta_ads)/.test(src)) {
+    return { originLabel: OriginLabel.META_ADS, originReason: OriginReason.UTM_REGEX };
+  }
+
+  if (/(tiktok|linkedin|lkd|twitter|x)/.test(src)) {
+    return { originLabel: OriginLabel.SOCIAL, originReason: OriginReason.UTM_REGEX };
+  }
+
   // Regra 2: Plataforma declarada
   const platform = (click.trackingLink?.platform || "").toLowerCase().trim();
   if (platform === "meta") return { originLabel: OriginLabel.META_ADS, originReason: OriginReason.PLATFORM };
@@ -91,7 +106,7 @@ function classifyOriginFromClick(click: {
   if (platform === "social") return { originLabel: OriginLabel.SOCIAL, originReason: OriginReason.PLATFORM };
 
   // Regra 3: UTMs (regex)
-  const src = normalizeUtm(click.utmSource);
+  // const src = normalizeUtm(click.utmSource);  <-- Removed as per instructions
   const med = normalizeUtm(click.utmMedium);
   const isPaid = /(cpc|ads|pago|paid)/.test(med);
 
@@ -152,6 +167,9 @@ function getTemporalWindowMs(): number {
   return Math.floor(hours * 60 * 60 * 1000);
 }
 
+const LEAD_STATE_FALLBACK_DAYS = Number(process.env.ATTR_LEAD_STATE_FALLBACK_DAYS ?? 7)
+const LEAD_STATE_FALLBACK_MS = LEAD_STATE_FALLBACK_DAYS * 24 * 60 * 60 * 1000
+
 /**
  * Waterfall v1:
  * - Level 0: ZERO_WIDTH_EXACT (1.0)
@@ -160,11 +178,12 @@ function getTemporalWindowMs(): number {
  */
 export async function runAttributionMatch(args: {
   prisma: PrismaClient;
+  leadId?: string | null
   whatsappNumber: string | null;
   messageText: string;
   messageDate: Date;
 }): Promise<MatchResult> {
-  const { prisma, whatsappNumber, messageText, messageDate } = args;
+  const { prisma, leadId, whatsappNumber, messageText, messageDate } = args;
 
   const cleanedMessageText = stripZeroWidthEnvelope(messageText).trim();
   const now = messageDate;
@@ -285,6 +304,44 @@ export async function runAttributionMatch(args: {
 
       const diffMs = now.getTime() - new Date(chosen.createdAt).getTime();
       clickToMessageLatencySeconds = diffMs >= 0 ? Math.floor(diffMs / 1000) : null;
+    }
+  }
+
+  // ----------------------------
+  // Level 2: lead-state fallback (Sprint 6.5)
+  // ----------------------------
+  // IMPORTANT:
+  // - Does NOT change the official attribution model.
+  // - Never sets clickLogId.
+  // - Only reduces artificial UNTRACKED for conversation continuity.
+  // Only apply if we still have no click match and are UNTRACKED.
+  if (!clickLogId && originLabel === OriginLabel.UNTRACKED && leadId) {
+    try {
+      const lead = await prisma.lead.findUnique({
+        where: { id: leadId },
+        select: {
+          lastTrackedOriginLabel: true,
+          lastSeenAt: true,
+        },
+      });
+
+      const lastLabel = lead?.lastTrackedOriginLabel ?? null;
+      const lastSeenAt = lead?.lastSeenAt ?? null;
+
+      if (lastLabel && lastLabel !== OriginLabel.UNTRACKED && lastSeenAt) {
+        const ageMs = Math.abs(now.getTime() - new Date(lastSeenAt).getTime());
+
+        if (ageMs <= LEAD_STATE_FALLBACK_MS) {
+          matchMethod = "LEAD_STATE_FALLBACK";
+          matchConfidence = 0.35;
+          originLabel = lastLabel;
+          originReason = OriginReason.FALLBACK_MATCHED;
+          clickToMessageLatencySeconds = null;
+        }
+      }
+    } catch (e) {
+      // Never block message ingestion if fallback lookup fails
+      console.warn("[attribution] lead-state fallback failed:", e);
     }
   }
 

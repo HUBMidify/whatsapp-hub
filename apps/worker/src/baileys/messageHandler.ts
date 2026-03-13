@@ -2,7 +2,12 @@ import { WAMessage, WASocket } from '@whiskeysockets/baileys';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { runAttributionMatch } from "../attribution/attributionEngine";
 
-const prisma = new PrismaClient();
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
+
+export const prisma =
+  globalForPrisma.prisma ?? new PrismaClient()
+
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
 
 type BaileysMessageTimestamp = number | string | bigint | { toNumber: () => number };
 
@@ -101,6 +106,7 @@ export async function handleIncomingMessage(message: WAMessage, sock?: WASocket)
 
     const attribution = await runAttributionMatch({
       prisma,
+      leadId: lead.id,
       messageText,
       messageDate,
       whatsappNumber,
