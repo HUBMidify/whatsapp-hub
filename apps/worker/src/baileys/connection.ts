@@ -3,18 +3,29 @@ import makeWASocket, {
   useMultiFileAuthState as multiFileAuthState,
   WASocket,
   ConnectionState,
+  fetchLatestBaileysVersion,
 } from "@whiskeysockets/baileys"
 import { Boom } from "@hapi/boom"
 import qrcode from "qrcode"
-import { PrismaClient } from "@prisma/client"
-import { Prisma } from "@prisma/client"
+import { PrismaClient, Prisma } from "@prisma/client"
 import pino from "pino"
 import fs from "fs/promises"
 import { handleIncomingMessage } from "./messageHandler"
 
-const prisma = new PrismaClient()
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
+export const prisma = globalForPrisma.prisma ?? new PrismaClient()
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
 
 const activeConnections = new Map<string, WASocket>()
+
+// Evita múltiplos timers de reconexão concorrentes por userId
+const reconnectTimers = new Map<string, NodeJS.Timeout>()
+
+function clearReconnectTimer(userId: string) {
+  const t = reconnectTimers.get(userId)
+  if (t) clearTimeout(t)
+  reconnectTimers.delete(userId)
+}
 
 // Evita ficar preso em `pending` para sempre: cada pendência expira automaticamente.
 const pendingConnections = new Map<string, NodeJS.Timeout>()
@@ -69,6 +80,7 @@ export async function disconnectWhatsApp(userId: string): Promise<{
 }> {
   // Remove from pending (if any)
   clearPending(userId)
+  clearReconnectTimer(userId)
 
   const sock = activeConnections.get(userId)
 
@@ -182,10 +194,25 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
     const authFolder = `./auth_sessions/${userId}`
     const { state, saveCreds } = await multiFileAuthState(authFolder)
 
+    // ❗ NÃO hardcode `version`.
+    // Hardcodes de WA Web version têm causado 405 ("Connection Failure").
+    // Melhor tentar buscar a versão mais recente; se falhar, seguimos sem setar version.
+    let latestVersion: [number, number, number] | undefined
+    try {
+      const { version } = await fetchLatestBaileysVersion({
+        // evita travar caso a request demore
+        signal: AbortSignal.timeout(5_000),
+      } as any)
+      latestVersion = version as [number, number, number]
+    } catch (e) {
+      console.warn("⚠️  Não foi possível buscar versão mais recente do WhatsApp Web. Continuando sem version.")
+    }
+
     const sock = makeWASocket({
       auth: state,
       printQRInTerminal: false,
       logger: pino({ level: "silent" }),
+      ...(latestVersion ? { version: latestVersion } : {}),
     })
 
     let qrCodeData: string | null = null
@@ -199,11 +226,14 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
     sock.ev.on("connection.update", async (update: Partial<ConnectionState>) => {
       const { connection, lastDisconnect, qr } = update
 
+      const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
+      const errorMessage = lastDisconnect?.error?.message
+
       console.log("🔄 Connection update:", {
         connection,
         hasDisconnect: !!lastDisconnect,
-        disconnectReason: (lastDisconnect?.error as Boom)?.output?.statusCode,
-        disconnectMessage: lastDisconnect?.error?.message,
+        disconnectReason: statusCode,
+        disconnectMessage: errorMessage,
       })
 
       if (qr) {
@@ -214,41 +244,46 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
       if (connection === "open") {
         console.log("✅ WhatsApp conectado!")
         clearPending(userId)
+        clearReconnectTimer(userId)
 
-        // Extrai JID e número limpo do usuário conectado
-        const jid = sock.user?.id ?? null // ex: 5521999391590:10@s.whatsapp.net
-        const number = jid ? jid.split(":")[0] : null // remove :10
+        const jid = sock.user?.id ?? null
+        const number = jid ? jid.split(":")[0] : null
 
-        const existing = await prisma.whatsAppSession.findFirst({
-          where: { userId },
-          orderBy: { createdAt: "desc" },
-          select: { id: true },
-        })
-
-        if (existing) {
-          await prisma.whatsAppSession.update({
-            where: { id: existing.id },
-            data: {
-              status: "CONNECTED",
-              lastPingAt: new Date(),
-              whatsappJid: jid,
-              whatsappNumber: number,
-            },
+        try {
+          const existing = await prisma.whatsAppSession.findFirst({
+            where: { userId },
+            orderBy: { createdAt: "desc" },
+            select: { id: true },
           })
-        } else {
-          await prisma.whatsAppSession.create({
-            data: {
-              userId,
-              credentials: JSON.stringify(state.creds),
-              status: "CONNECTED",
-              lastPingAt: new Date(),
-              whatsappJid: jid,
-              whatsappNumber: number,
-            },
-          })
+
+          if (existing) {
+            await prisma.whatsAppSession.update({
+              where: { id: existing.id },
+              data: {
+                status: "CONNECTED",
+                lastPingAt: new Date(),
+                whatsappJid: jid,
+                whatsappNumber: number,
+              },
+            })
+          } else {
+            await prisma.whatsAppSession.create({
+              data: {
+                userId,
+                credentials: JSON.stringify(state.creds),
+                status: "CONNECTED",
+                lastPingAt: new Date(),
+                whatsappJid: jid,
+                whatsappNumber: number,
+              },
+            })
+          }
+        } catch (e) {
+          console.warn("⚠️  Falha ao persistir status CONNECTED no banco:", e)
         }
 
         activeConnections.set(userId, sock)
+        return
       }
 
       if (connection === "close") {
@@ -265,17 +300,38 @@ export async function connectWhatsApp(userId: string): Promise<QRResponse> {
           console.warn("⚠️  Falha ao marcar DISCONNECTED no banco:", e)
         }
 
-        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
+        // ✅ STOP LOOP: não reconecta em 405 (Connection Failure)
+        if (statusCode === 405) {
+          console.error("⛔  405 Connection Failure. Não vou reconectar em loop.", {
+            statusCode,
+            errorMessage,
+          })
+          return
+        }
+
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut
 
         console.log("❌ Conexão fechada:", {
           statusCode,
           shouldReconnect,
-          errorMessage: lastDisconnect?.error?.message,
+          errorMessage,
         })
 
         if (shouldReconnect) {
-          setTimeout(() => connectWhatsApp(userId), 5000)
+          // Não criar múltiplas reconexões paralelas
+          if (reconnectTimers.has(userId)) {
+            console.log("⏳ Reconexão já agendada. Ignorando novo agendamento.")
+            return
+          }
+
+          const t = setTimeout(() => {
+            reconnectTimers.delete(userId)
+            connectWhatsApp(userId).catch((e) => {
+              console.warn("⚠️  Falha na tentativa de reconexão:", e)
+            })
+          }, 5000)
+
+          reconnectTimers.set(userId, t)
         }
       }
     })

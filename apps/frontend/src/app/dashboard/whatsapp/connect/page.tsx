@@ -8,6 +8,7 @@ export default function WhatsAppConnect() {
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'loading' | 'connected'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [isDisconnecting, setIsDisconnecting] = useState(false)
+  const [info, setInfo] = useState<string | null>(null)
 
   useEffect(() => {
     // Ao abrir a página, checa se já existe sessão conectada
@@ -17,10 +18,19 @@ export default function WhatsAppConnect() {
         const data = await res.json()
 
         if (data?.connected) {
-          setConnectionStatus('connected')
+          setConnectionStatus("connected")
           setQrCode(null)
           setError(null)
-        }
+          setInfo(null)
+        return
+      }
+
+        if (data?.status === "pending") {
+           setConnectionStatus("loading")
+           setQrCode(null)
+           setError(null)
+           setInfo(data?.message || "Conexão em andamento... aguarde")
+          }
       } catch {
         // ignora erro inicial
       }
@@ -43,13 +53,33 @@ export default function WhatsAppConnect() {
 
       const data = await res.json()
 
-      if (!data.qrCode) {
-        // Já está conectado
-        setConnectionStatus('connected')
-        return
-      }
+      // 1) Se o worker diz que está conectado
+if (data?.status === "connected" || data?.connected === true) {
+  setConnectionStatus("connected")
+  setQrCode(null)
+  setInfo(null)
+  return
+}
 
-      setQrCode(data.qrCode)
+// 2) Se já existe uma conexão em andamento (pending)
+if (data?.status === "pending") {
+  setConnectionStatus("loading")
+  setQrCode(null)
+  setInfo(data?.message || "Conexão em andamento... aguarde")
+  return
+}
+
+// 3) Se retornou QR Code válido
+if (data?.qrCode) {
+  setConnectionStatus("loading")
+  setQrCode(data.qrCode)
+  setInfo("Escaneie o QR Code para conectar")
+  return
+}
+
+// 4) Qualquer outro caso é erro
+throw new Error("Resposta inválida do worker")
+
     } catch (err) {
       setError('Não foi possível gerar o QR Code')
       setConnectionStatus('idle')
@@ -85,7 +115,7 @@ export default function WhatsAppConnect() {
   }
 
   useEffect(() => {
-    if (!qrCode || connectionStatus === 'connected') return
+    if (connectionStatus !== "loading") return
 
     const interval = setInterval(async () => {
       try {
@@ -186,8 +216,8 @@ export default function WhatsAppConnect() {
             <p className="text-gray-600">Clique no botão para gerar o QR Code</p>
           )}
           {connectionStatus === 'loading' && (
-            <p className="text-gray-600">Aguardando conexão...</p>
-          )}
+        <p className="text-gray-600">{info || "Aguardando conexão..."}</p>
+         )}
           {connectionStatus === 'connected' && (
             <>
               <p className="text-green-700">WhatsApp conectado!</p>
