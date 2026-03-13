@@ -149,7 +149,7 @@ export default function OverviewPage() {
         />
         
         <MetricCard
-          title="Tracking Quality"
+          title="Cobertura de rastreamento"
           value={
             trackingLoading
               ? "…"
@@ -160,12 +160,12 @@ export default function OverviewPage() {
           sub={
             trackingLoading || trackingError
               ? null
-              : `Rastreadas: ${trackingData?.tracked ?? 0} / ${trackingData?.total ?? 0}`
+              : `Conversas rastreadas: ${trackingData?.tracked ?? 0} / ${trackingData?.total ?? 0}`
           }
         />
         
         <MetricCard
-  title="Origin Mix"
+  title="Principal origem"
   value={
     originMix.isLoading
       ? "…"
@@ -186,12 +186,12 @@ export default function OverviewPage() {
             (originMix.data?.untracked?.pct ?? 0) * 100
           );
           const total = originMix.data?.total ?? 0;
-          return `Não rastreadas: ${untrackedPct}% • Total: ${total}`;
+          return `Sem rastreamento: ${untrackedPct}% • Total: ${total}`;
         })()
   }
 />
       <MetricCard
-  title="Match Quality"
+  title="Qualidade de identificação"
   value={
     matchQuality.isLoading
       ? "…"
@@ -219,8 +219,8 @@ export default function OverviewPage() {
             : null;
 
           const parts: string[] = [];
-          parts.push(`Atribuídas: ${matched} / ${total}`);
-          if (topLabel) parts.push(`Top: ${topLabel}`);
+          parts.push(`Conversas identificadas: ${matched} / ${total}`);
+          if (topLabel) parts.push(`Método líder: ${topLabel}`);
           return parts.join(" • ");
         })()
   }
@@ -230,8 +230,8 @@ export default function OverviewPage() {
       <Card className="p-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <div className="text-sm text-muted-foreground">Touch Model</div>
-            <div className="mt-1 text-lg font-semibold">Distribuição por jornada</div>
+            <div className="text-sm text-muted-foreground">Jornada do lead</div>
+            <div className="mt-1 text-lg font-semibold">Aquisição, retorno e último touch</div>
           </div>
           <div>
             {touchModel.isLoading ? (
@@ -353,7 +353,7 @@ export default function OverviewPage() {
         )}
 
         <div className="mt-4 text-xs text-muted-foreground">
-          * Retorno direto = lead já conhecido que voltou sem rastreamento. Nunca rastreados = lead sem nenhum touch rastreado na janela.
+          * Retorno direto = lead já conhecido que voltou sem identificação automática. Nunca rastreados = lead sem origem identificada na janela analisada.
         </div>
       </Card>
     </div>

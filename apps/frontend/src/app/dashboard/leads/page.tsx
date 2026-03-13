@@ -36,10 +36,16 @@ export default async function DashboardPage() {
     const first = convs[0]
     const last = convs[convs.length - 1]
 
+    const originLabel = first.lead.firstTrackedOriginLabel
+    const lastTouchLabel = first.lead.lastTrackedOriginLabel
+
     return {
       id: first.leadId,
       name: first.lead.name || formatPhone(first.lead.phone),
-      origin: last.matchMethod || "ORGÂNICO",
+      origin: formatOriginLabel(originLabel),
+      lastTouch: formatOriginLabel(lastTouchLabel),
+      matchScore: toMatchScore(last.matchConfidence),
+      matchMethodLabel: formatMatchMethod(last.matchMethod),
       firstMessageAt: first.createdAt,
       lastMessageAt: last.createdAt,
     }
@@ -73,6 +79,50 @@ export default async function DashboardPage() {
 
 function formatDate(date: Date) {
   return format(date, "dd/MM/yyyy HH:mm", { locale: ptBR })
+}
+
+function formatOriginLabel(label: string | null | undefined): string {
+  switch (label) {
+    case "GOOGLE_ADS":
+      return "Google Ads"
+    case "META_ADS":
+      return "Meta Ads"
+    case "SOCIAL":
+      return "Social"
+    case "OTHER":
+      return "Outros"
+    case "UNTRACKED":
+      return "Não rastreado"
+    case "NEVER_TRACKED":
+      return "Nunca rastreado"
+    case null:
+    case undefined:
+      return "Não rastreado"
+    default:
+      return label.replaceAll("_", " ")
+  }
+}
+
+function formatMatchMethod(method: string | null | undefined): string {
+  switch (method) {
+    case "ZERO_WIDTH_EXACT":
+      return "Identificação exata"
+    case "TEMPORAL_WINDOW":
+      return "Janela de tempo"
+    case "ORGANIC":
+      return "Sem identificação automática"
+    case null:
+    case undefined:
+      return "Não identificado"
+    default:
+      return method.replaceAll("_", " ")
+  }
+}
+
+function toMatchScore(confidence: number | null | undefined): number {
+  if (confidence == null || Number.isNaN(confidence)) return 0
+  const score = Math.round(confidence * 10)
+  return Math.max(0, Math.min(10, score))
 }
 
 function formatPhone(phone: string): string {

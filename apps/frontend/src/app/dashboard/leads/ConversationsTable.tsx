@@ -8,6 +8,9 @@ type Row = {
   id: string
   name: string
   origin: string
+  lastTouch: string
+  matchScore: number
+  matchMethodLabel: string
   firstMessageAt: Date
   lastMessageAt: Date
 }
@@ -25,9 +28,13 @@ export function ConversationsTable({ rows }: { rows: Row[] }) {
   const [endDate, setEndDate] = useState('')
 
   const filteredRows = rows.filter((row) => {
+    const term = search.toLowerCase()
     const searchMatch =
-      row.name.toLowerCase().includes(search.toLowerCase()) ||
-      row.origin.toLowerCase().includes(search.toLowerCase())
+      row.name.toLowerCase().includes(term) ||
+      row.origin.toLowerCase().includes(term) ||
+      row.lastTouch.toLowerCase().includes(term) ||
+      row.matchMethodLabel.toLowerCase().includes(term) ||
+      `${row.matchScore}/10`.includes(term)
 
     const originMatch = origin ? row.origin === origin : true
 
@@ -90,7 +97,7 @@ useEffect(() => {
         </label>
         <input
           className="input"
-          placeholder="Buscar por nome ou origem"
+          placeholder="Buscar por nome, origem, último touch ou score"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -110,10 +117,11 @@ useEffect(() => {
       onChange={(e) => setOrigin(e.target.value)}
     >
       <option value="">Todas as origens</option>
-      <option value="FBCLID">FBCLID</option>
-      <option value="PHONE">PHONE</option>
-      <option value="MANUAL">MANUAL</option>
-      <option value="ORGANIC">ORGANIC</option>
+      {Array.from(new Set(rows.map((row) => row.origin))).map((value) => (
+        <option key={value} value={value}>
+          {value}
+        </option>
+      ))}
     </select>
 
     <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400">
@@ -166,7 +174,13 @@ useEffect(() => {
               Nome
             </th>
             <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
-              Origem
+              Origem do lead
+            </th>
+            <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+              Último touch
+            </th>
+            <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+              Match
             </th>
             <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
               Primeira Mensagem
@@ -183,7 +197,7 @@ useEffect(() => {
         <tbody>
           {filteredRows.length === 0 ? (
             <tr>
-              <td colSpan={5} className="py-10 text-center text-sm text-gray-500">
+              <td colSpan={7} className="py-10 text-center text-sm text-gray-500">
                 Nenhum resultado com os filtros atuais
               </td>
             </tr>
@@ -200,6 +214,23 @@ useEffect(() => {
                 <td className="py-3 px-4">
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                     {row.origin}
+                  </span>
+                </td>
+
+                <td className="py-3 px-4">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                    {row.lastTouch}
+                  </span>
+                </td>
+
+                <td className="py-3 px-4">
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getMatchScoreClasses(
+                      row.matchScore
+                    )}`}
+                    title={row.matchMethodLabel}
+                  >
+                    {row.matchScore}/10
                   </span>
                 </td>
 
@@ -268,7 +299,16 @@ useEffect(() => {
             {selectedRow.name}
           </h3>
           <p className="text-sm text-gray-600 mt-1">
-            Origem: {selectedRow.origin}
+            Origem do lead: {selectedRow.origin}
+          </p>
+          <p className="text-sm text-gray-600 mt-1">
+            Último touch: {selectedRow.lastTouch}
+          </p>
+          <p className="text-sm text-gray-600 mt-1">
+            Match: {selectedRow.matchScore}/10
+          </p>
+          <p className="text-sm text-gray-600 mt-1">
+            Método interno: {selectedRow.matchMethodLabel}
           </p>
         </div>
 
@@ -338,4 +378,12 @@ useEffect(() => {
 )}
   </>
 )
+}
+
+function getMatchScoreClasses(score: number): string {
+  if (score >= 9) return 'bg-emerald-50 text-emerald-700'
+  if (score >= 7) return 'bg-sky-50 text-sky-700'
+  if (score >= 5) return 'bg-amber-50 text-amber-700'
+  if (score >= 3) return 'bg-orange-50 text-orange-700'
+  return 'bg-rose-50 text-rose-700'
 }
